@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { signInWithApple } from '../lib/appleAuth'
 import { supabase } from '../lib/supabase'
 import { AppleLogo, GoogleLogo } from './brandLogos'
 
@@ -18,9 +19,14 @@ export default function AuthScreen() {
     setBusy(provider)
     setError(null)
     try {
+      if (provider === 'apple') {
+        await signInWithApple()
+        setBusy(null)
+        return
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: `${window.location.origin}/` },
       })
       if (error) throw error
       // On success the browser redirects to the provider; keep the spinner until it does.
