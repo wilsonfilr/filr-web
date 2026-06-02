@@ -1,0 +1,90 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-filr-bg: #101922;
+  --color-filr-surface: #182230;
+  --color-filr-surface-2: #1f2a39;
+  --color-filr-border: #2a3848;
+  --color-filr-accent: #7fc1ff;
+  --color-filr-accent-fg: #101922;
+  --color-filr-text: #ebf3fe;
+  --color-filr-muted: #9ea6b5;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Light theme — applied on the workspace wrapper via data-theme="light".
+   Unlayered rules override Tailwind's layered @theme :root values. */
+[data-theme='light'] {
+  --color-filr-bg: #f1f5fa;
+  --color-filr-surface: #ffffff;
+  --color-filr-surface-2: #e9f0f8;
+  --color-filr-border: #d6e1ee;
+  --color-filr-accent: #2f86e0;
+  --color-filr-accent-fg: #ffffff;
+  --color-filr-text: #101922;
+  --color-filr-muted: #5c6b7b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-filr-bg);
+  color: var(--color-filr-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page-gradient {
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -20%, rgba(127, 193, 255, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 80% 60%, rgba(127, 193, 255, 0.06), transparent 50%),
+    #101922;
+}
+
+/* Thin scrollbars that match the dark theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3848 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #2a3848;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@keyframes filr-view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.filr-view-enter {
+  animation: filr-view-enter 0.28s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filr-view-enter {
+    animation: none;
+  }
+
+  .filr-tag-row-panel,
+  .filr-tag-row-inner {
+    transition: none !important;
+  }
+}
