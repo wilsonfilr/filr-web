@@ -52,7 +52,7 @@ quickest path with **Vercel** (Netlify / Cloudflare Pages are nearly identical).
 | Root directory | `filr-web` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Env vars | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APPLE_SERVICES_ID`, `VITE_SITE_URL` |
+| Env vars | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
 
 ### 2. Deploy
 
@@ -97,11 +97,9 @@ matching provider enabled in the dashboard:
      - `https://web.myfilr.app/`
      - `https://jjuokcotwuzxiejicchd.supabase.co/auth/v1/callback`
   3. In Supabase → Apple provider → **Client IDs**, add the **Services ID** alongside your iOS App ID
-     (`com.wilsonfilr.filr`) so both native and web tokens validate
-  4. In Vercel, set `VITE_APPLE_SERVICES_ID` to that same Services ID and `VITE_SITE_URL=https://web.myfilr.app`,
-     then redeploy
+     (`com.wilsonfilr.filr`) so both native and web OAuth work
 
-  The web app uses Apple's JS popup + `signInWithIdToken` (same as the iOS app), not a full-page OAuth redirect.
+  The web app uses Supabase OAuth redirect (`signInWithOAuth`) back to `https://web.myfilr.app`.
 
 Until a provider is configured, its button will return a provider error — email magic link still
 works on its own.

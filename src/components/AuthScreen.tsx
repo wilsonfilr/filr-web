@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signInWithApple } from '../lib/appleAuth'
+import { signInWithAppleWeb } from '../lib/appleAuth'
 import { supabase } from '../lib/supabase'
 import { AppleLogo, GoogleLogo } from './brandLogos'
 
@@ -20,8 +20,7 @@ export default function AuthScreen() {
     setError(null)
     try {
       if (provider === 'apple') {
-        await signInWithApple()
-        setBusy(null)
+        await signInWithAppleWeb()
         return
       }
       const { error } = await supabase.auth.signInWithOAuth({
