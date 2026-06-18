@@ -37,7 +37,7 @@ export default function RecentlyDeletedPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number; scroll0: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const loadItems = useCallback(async () => {
@@ -156,14 +156,30 @@ export default function RecentlyDeletedPanel({
     if (!marquee) return
     function onMove(e: MouseEvent) {
       setMarquee((m) => (m ? { ...m, x1: e.clientX, y1: e.clientY } : m))
-      const left = Math.min(marquee!.x0, e.clientX)
-      const right = Math.max(marquee!.x0, e.clientX)
-      const top = Math.min(marquee!.y0, e.clientY)
-      const bottom = Math.max(marquee!.y0, e.clientY)
+      const container = listRef.current
+      if (!container) return
+      // Convert client coords to container-content coords so items scrolled out of
+      // view are still hit-tested correctly.
+      const cr = container.getBoundingClientRect()
+      const toContentY = (clientY: number, capturedScroll: number) =>
+        clientY - cr.top + capturedScroll
+      const y0 = toContentY(marquee!.y0, marquee!.scroll0)
+      const y1 = toContentY(e.clientY, container.scrollTop)
+      const top = Math.min(y0, y1)
+      const bottom = Math.max(y0, y1)
+      // Horizontal: no scroll, plain client coords offset by container left
+      const x0 = marquee!.x0 - cr.left
+      const x1 = e.clientX - cr.left
+      const left = Math.min(x0, x1)
+      const right = Math.max(x0, x1)
       const next = new Set<string>()
-      listRef.current?.querySelectorAll('[data-rd-selkey]').forEach((node) => {
+      container.querySelectorAll('[data-rd-selkey]').forEach((node) => {
         const r = node.getBoundingClientRect()
-        const hit = !(r.right < left || r.left > right || r.bottom < top || r.top > bottom)
+        const itemTop = r.top - cr.top + container.scrollTop
+        const itemBottom = r.bottom - cr.top + container.scrollTop
+        const itemLeft = r.left - cr.left
+        const itemRight = r.right - cr.left
+        const hit = !(itemRight < left || itemLeft > right || itemBottom < top || itemTop > bottom)
         if (hit) {
           const k = node.getAttribute('data-rd-selkey')
           if (k) next.add(k)
@@ -187,7 +203,7 @@ export default function RecentlyDeletedPanel({
     const target = e.target as HTMLElement
     if (target.closest('[data-rd-selkey]')) return
     setSelected(new Set())
-    setMarquee({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY })
+    setMarquee({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, scroll0: listRef.current?.scrollTop ?? 0 })
   }
 
   const marqueeRect = marquee
