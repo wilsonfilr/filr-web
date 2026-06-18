@@ -14,7 +14,7 @@ type Props = {
   view?: 'grid' | 'list'
   listRowClass?: string
   onOpen: (doc: Document) => void
-  onToggleSelect: (item: DragItem) => void
+  onItemSelect: (e: React.MouseEvent, item: DragItem) => void
   onContextMenu: (e: React.MouseEvent, item: DragItem) => void
   dragPayloadFor: (item: DragItem) => DragItem[]
   onDragStart: (items: DragItem[]) => void
@@ -29,7 +29,7 @@ export default function DocumentCard({
   view = 'grid',
   listRowClass = 'flex cursor-pointer items-center gap-3 rounded-xl border bg-filr-surface px-4 py-3 text-left transition',
   onOpen,
-  onToggleSelect,
+  onItemSelect,
   onContextMenu,
   dragPayloadFor,
   onDragStart,
@@ -80,9 +80,9 @@ export default function DocumentCard({
     },
     onDragEnd,
     onClick: (e: React.MouseEvent) => {
-      if (e.metaKey || e.ctrlKey) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey) {
         e.preventDefault()
-        onToggleSelect(item)
+        onItemSelect(e, item)
       } else {
         onOpen(doc)
       }

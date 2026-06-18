@@ -160,6 +160,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   const sortMenuAnchorRef = useRef<HTMLDivElement>(null)
   const isFirstLoadRef = useRef(true)
   const syncCountRef = useRef(0)
+  const selectionAnchorRef = useRef<string | null>(null)
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
 
   const load = useCallback(async () => {
@@ -295,6 +296,14 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
     )
   }, [documents, isSearching, trimmedQuery, selectedFolderId, activeTagIds, sortOption, isFreePlan])
 
+  const orderedItems = useMemo<DragItem[]>(
+    () => [
+      ...visibleSubfolders.map((f) => ({ type: 'folder' as const, id: f.id })),
+      ...visibleDocuments.map((d) => ({ type: 'document' as const, id: d.id })),
+    ],
+    [visibleSubfolders, visibleDocuments],
+  )
+
   const breadcrumbs = useMemo(() => {
     const chain: Folder[] = []
     let current = selectedFolderId ? foldersById.get(selectedFolderId) : undefined
@@ -367,6 +376,32 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       return next
     })
   }, [])
+
+  const handleItemSelect = useCallback(
+    (e: React.MouseEvent, item: DragItem) => {
+      const k = keyOf(item)
+      if (e.shiftKey) {
+        e.preventDefault()
+        const anchor = selectionAnchorRef.current
+        if (anchor !== null) {
+          const ai = orderedItems.findIndex((i) => keyOf(i) === anchor)
+          const ci = orderedItems.findIndex((i) => keyOf(i) === k)
+          if (ai !== -1 && ci !== -1) {
+            const [lo, hi] = ai < ci ? [ai, ci] : [ci, ai]
+            const rangeKeys = orderedItems.slice(lo, hi + 1).map(keyOf)
+            setSelected((prev) =>
+              e.metaKey || e.ctrlKey ? new Set([...prev, ...rangeKeys]) : new Set(rangeKeys),
+            )
+            return
+          }
+        }
+      }
+      // Cmd/Ctrl only, or Shift with no anchor: toggle and update anchor
+      toggleSelect(item)
+      selectionAnchorRef.current = k
+    },
+    [orderedItems, toggleSelect],
+  )
 
   const dragPayloadFor = useCallback(
     (item: DragItem): DragItem[] => {
@@ -903,11 +938,13 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
     if (e.button !== 0) return
     const target = e.target as HTMLElement
     if (target.closest('[data-selkey]') || target.closest('[data-no-marquee]')) return
+    selectionAnchorRef.current = null
     clearSelection()
     setMarquee({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY })
   }
 
   function navigate(folderId: string | null) {
+    selectionAnchorRef.current = null
     setSelectedFolderId(folderId)
     setQuery('')
     clearSelection()
@@ -1187,7 +1224,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
                               }
                             }}
                             onClick={(e) => {
-                              if (e.metaKey || e.ctrlKey) toggleSelect(item)
+                              if (e.metaKey || e.ctrlKey || e.shiftKey) handleItemSelect(e, item)
                               else navigate(folder.id)
                             }}
                             onContextMenu={(e) => openContextMenu(e, item)}
@@ -1253,7 +1290,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
                           view={documentView}
                           listRowClass={LIST_ROW}
                           onOpen={setSelectedDoc}
-                          onToggleSelect={toggleSelect}
+                          onItemSelect={handleItemSelect}
                           onContextMenu={openContextMenu}
                           dragPayloadFor={dragPayloadFor}
                           onDragStart={setDragItems}
