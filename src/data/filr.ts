@@ -1,4 +1,5 @@
 import { supabase, DOCUMENTS_BUCKET } from '../lib/supabase'
+import { StorageLimitError, wouldExceedStorageLimit } from '../lib/storageLimits'
 import { resolveUniqueName } from '../lib/resolveUniqueName'
 import {
   collectDocsInFolders,
@@ -800,11 +801,19 @@ export async function uploadPdfDocument(
   userId: string,
   file: File,
   folderId: string | null,
+  options?: { storageLimitBytes?: number },
 ): Promise<Document> {
   const id = crypto.randomUUID()
   const baseTitle = file.name.replace(/\.pdf$/i, '').trim() || 'Untitled'
   const siblings = await siblingDocumentTitles(userId, folderId)
   const title = resolveUniqueName(baseTitle, siblings)
+
+  if (options?.storageLimitBytes != null) {
+    const used = await getStorageUsage(userId)
+    if (wouldExceedStorageLimit(used, options.storageLimitBytes, file.size)) {
+      throw new StorageLimitError(used, options.storageLimitBytes)
+    }
+  }
 
   const { error: uploadError } = await supabase.storage
     .from(DOCUMENTS_BUCKET)

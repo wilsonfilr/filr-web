@@ -64,7 +64,9 @@ export default function Topbar({
               <input
                 value={query}
                 onChange={(e) => onQueryChange(e.target.value)}
-                placeholder="Search by title or document text…"
+                placeholder={
+                  isFreePlan ? 'Search by title…' : 'Search by title or document text…'
+                }
                 className={`h-9 w-full rounded-full border border-filr-border bg-filr-bg/60 pl-9 text-sm text-filr-text outline-none transition placeholder:text-filr-muted/60 focus:border-filr-accent ${query ? 'pr-9' : 'pr-3'}`}
               />
               {query ? (

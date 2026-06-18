@@ -7,8 +7,7 @@ export default function MobileAppPrompt() {
         <img src="/filr-logo.svg" alt="Filr" className="mx-auto h-16 w-16" />
         <h1 className="mt-6 text-2xl font-bold tracking-tight">Use the Filr app on your phone</h1>
         <p className="mt-3 text-sm leading-relaxed text-filr-muted">
-          Filr Web is built for computers and tablets. On a phone, open the Filr app to scan documents,
-          use smart filing, and access your ID vault.
+          Filr Web is built for computers and tablets. Get the app on your phone.
         </p>
         <a
           href={APP_HOME_URL}

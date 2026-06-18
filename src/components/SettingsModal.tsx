@@ -77,6 +77,7 @@ type Props = {
   email: string | null
   theme: Theme
   plan: 'free' | 'premium'
+  addonGb: number
   userId: string
   tags: UserTag[]
   folders: Folder[]
@@ -93,6 +94,7 @@ export default function SettingsModal({
   email,
   theme,
   plan,
+  addonGb,
   userId,
   tags,
   folders,
@@ -250,9 +252,15 @@ export default function SettingsModal({
           ) : subsheet === 'vault' ? (
             <VaultPanel userId={userId} />
           ) : subsheet === 'plan' ? (
-            <PlanPanel userId={userId} plan={plan} theme={theme} onGetMoreStorage={handleGetMoreStorage} />
+            <PlanPanel
+              userId={userId}
+              plan={plan}
+              addonGb={addonGb}
+              theme={theme}
+              onGetMoreStorage={handleGetMoreStorage}
+            />
           ) : subsheet === 'storage-upgrade' ? (
-            <StorageUpgradePanel plan={plan} />
+            <StorageUpgradePanel plan={plan} addonGb={addonGb} />
           ) : subsheet === 'premium-upgrade' ? (
             <PremiumUpgradePanel
               theme={theme}
@@ -498,16 +506,19 @@ function AccountSection({
 function PlanPanel({
   userId,
   plan,
+  addonGb,
   theme,
   onGetMoreStorage,
 }: {
   userId: string
   plan: 'free' | 'premium'
+  addonGb: number
   theme: Theme
   onGetMoreStorage: () => void
 }) {
   const isFree = plan === 'free'
-  const storageLimitBytes = getStorageLimitBytes(!isFree)
+  const storageLimitBytes = getStorageLimitBytes(!isFree, addonGb)
+  const premiumTotalStorageGb = 5 + addonGb
   const [storageUsedBytes, setStorageUsedBytes] = useState(0)
 
   useEffect(() => {
@@ -548,6 +559,15 @@ function PlanPanel({
             <CloudOutlineIcon className="h-[22px] w-[22px] shrink-0 text-filr-text" />
             <span className="text-sm font-semibold text-filr-text">Storage used</span>
           </div>
+          {!isFree && addonGb > 0 ? (
+            <div className="space-y-1 text-sm text-filr-muted">
+              <p>Base storage: 5 GB (Premium)</p>
+              <p>{`Add-on storage: +${addonGb} GB`}</p>
+              <p className="font-semibold text-filr-text">{`Total: ${premiumTotalStorageGb} GB`}</p>
+            </div>
+          ) : !isFree ? (
+            <p className="text-sm text-filr-muted">5 GB included</p>
+          ) : null}
           <div className="h-1 overflow-hidden rounded-full" style={{ backgroundColor: progressTrackColor }}>
             <div
               className="h-full rounded-full bg-[#6DAFEF] transition-[width] duration-300"
@@ -569,7 +589,7 @@ function PlanPanel({
   )
 }
 
-function StorageUpgradePanel({ plan }: { plan: 'free' | 'premium' }) {
+function StorageUpgradePanel({ plan, addonGb }: { plan: 'free' | 'premium'; addonGb: number }) {
   const [billing, setBilling] = useState<StorageAddonBilling>('monthly')
   const [selectedGb, setSelectedGb] = useState<number>(STORAGE_ADDON_TIERS[0].gb)
 
@@ -591,6 +611,9 @@ function StorageUpgradePanel({ plan }: { plan: 'free' | 'premium' }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        {addonGb > 0 ? (
+          <p className="mb-3 text-sm font-semibold text-[#6DAFEF]">{`+${addonGb} GB add-on active`}</p>
+        ) : null}
         <p className="mb-5 text-sm text-filr-muted">
           Add extra space on top of your Premium plan. Choose an add-on and billing cycle below.
         </p>
@@ -646,12 +669,12 @@ function StorageUpgradePanel({ plan }: { plan: 'free' | 'premium' }) {
       </div>
 
       <div className="shrink-0 border-t border-filr-border px-6 py-4">
-        <button
-          type="button"
-          className="flex w-full cursor-pointer items-center justify-center rounded-xl bg-[#6DAFEF] px-4 py-3 text-sm font-semibold text-[#101922] transition hover:opacity-90"
-        >
-          Add +{selectedTier.gb} GB — {selectedPriceLabel}
-        </button>
+        <p className="text-center text-sm text-filr-muted">
+          To add more storage, open the Filr app on your iPhone.
+        </p>
+        <p className="mt-2 text-center text-xs text-filr-muted">
+          {selectedTier.gb} GB add-on: {selectedPriceLabel}
+        </p>
       </div>
     </div>
   )

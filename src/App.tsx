@@ -15,6 +15,11 @@ import {
 import { applyFileItSuggestions } from './lib/applyFileIt'
 import type { FileItItem, FileItSuggestion } from './lib/fileItPaths'
 import {
+  getStorageLimitBytes,
+  StorageLimitError,
+  formatStorageSize,
+} from './lib/storageLimits'
+import {
   copyItemsToFolder,
   removeCopiedItems,
   createFolder,
@@ -123,6 +128,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('general')
   const [settingsInitialSubsheet, setSettingsInitialSubsheet] = useState<SettingsSubsheet | null>(null)
   const [userPlan, setUserPlan] = useState<'free' | 'premium'>('free')
+  const [addonGb, setAddonGb] = useState(0)
   const isFreePlan = userPlan === 'free'
   const [folderView, setFolderView] = useState<'grid' | 'list'>(() =>
     localStorage.getItem('filr-folder-view') === 'list' ? 'list' : 'grid',
@@ -195,13 +201,14 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
     void (async () => {
       const { data } = await supabase
         .from('subscriptions')
-        .select('plan')
+        .select('plan, addon_gb')
         .eq('user_id', userId)
         .maybeSingle()
       if (cancelled) {
         return
       }
       setUserPlan(data?.plan === 'monthly' || data?.plan === 'annual' ? 'premium' : 'free')
+      setAddonGb(typeof data?.addon_gb === 'number' ? data.addon_gb : 0)
     })()
     return () => {
       cancelled = true
@@ -257,12 +264,25 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
     )
   }, [folders, selectedFolderId, activeTagIds, sortOption])
 
+  const searchFolderHits = useMemo(() => {
+    if (!isSearching) {
+      return []
+    }
+    return folders.filter((f) => f.name.toLowerCase().includes(trimmedQuery))
+  }, [folders, isSearching, trimmedQuery])
+
   const visibleDocuments = useMemo(() => {
     let scoped = documents
     if (isSearching) {
-      scoped = documents.filter(
-        (d) => d.title.toLowerCase().includes(trimmedQuery) || d.ocrText.toLowerCase().includes(trimmedQuery),
-      )
+      scoped = documents.filter((d) => {
+        if (d.title.toLowerCase().includes(trimmedQuery)) {
+          return true
+        }
+        if (isFreePlan) {
+          return false
+        }
+        return d.ocrText.toLowerCase().includes(trimmedQuery)
+      })
     } else {
       scoped = documents.filter((d) => d.folderId === selectedFolderId)
     }
@@ -273,7 +293,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       (d) => d.title,
       (d) => ({ id: d.id, createdAt: d.createdAt }),
     )
-  }, [documents, isSearching, trimmedQuery, selectedFolderId, activeTagIds, sortOption])
+  }, [documents, isSearching, trimmedQuery, selectedFolderId, activeTagIds, sortOption, isFreePlan])
 
   const breadcrumbs = useMemo(() => {
     const chain: Folder[] = []
@@ -670,8 +690,9 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       setUploading(true)
       setError(null)
       try {
+        const storageLimitBytes = getStorageLimitBytes(!isFreePlan, addonGb)
         for (const file of pdfs) {
-          await uploadPdfDocument(userId, file, selectedFolderId)
+          await uploadPdfDocument(userId, file, selectedFolderId, { storageLimitBytes })
         }
         await load()
         if (rejectedCount > 0) {
@@ -680,12 +701,20 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
           })
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Upload failed.')
+        if (err instanceof StorageLimitError) {
+          setError(
+            isFreePlan
+              ? `Storage limit reached (${formatStorageSize(err.limitBytes)}). Upgrade in the Filr app for more space.`
+              : `Storage limit reached (${formatStorageSize(err.limitBytes)}). Add more storage in the Filr app.`,
+          )
+        } else {
+          setError(err instanceof Error ? err.message : 'Upload failed.')
+        }
       } finally {
         setUploading(false)
       }
     },
-    [userId, selectedFolderId, load],
+    [addonGb, isFreePlan, userId, selectedFolderId, load],
   )
 
   const externalFileDragActive = useExternalFileDrop(handleUpload)
@@ -1085,6 +1114,32 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
             {error && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
 
             <>
+                {isSearching && searchFolderHits.length > 0 && (
+                  <section className="mb-8">
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-filr-muted">Folders</h3>
+                    <div className="flex flex-col gap-2">
+                      {searchFolderHits.map((folder) => {
+                        const item: DragItem = { type: 'folder', id: folder.id }
+                        return (
+                          <div
+                            key={folder.id}
+                            data-selkey={`folder:${folder.id}`}
+                            onClick={() => {
+                              setQuery('')
+                              navigate(folder.id)
+                            }}
+                            onContextMenu={(e) => openContextMenu(e, item)}
+                            className={`${LIST_ROW} cursor-pointer border-filr-border hover:border-filr-accent/60`}
+                          >
+                            <FolderIcon className="h-5 w-5 shrink-0 text-filr-accent/80" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-filr-text">{folder.name}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
+
                 {!isSearching && visibleSubfolders.length > 0 && (
                   <section className="mb-8">
                     <div className="mb-3 flex items-center justify-between gap-3" data-no-marquee>
@@ -1176,9 +1231,10 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
                       <ViewToggle view={documentView} onChange={changeDocumentView} />
                     </div>
                   )}
-                  {visibleDocuments.length === 0 ? (
+                  {visibleDocuments.length === 0 &&
+                  (!isSearching || searchFolderHits.length === 0) ? (
                     <EmptyState isSearching={isSearching} tagFiltered={hasActiveTagFilter} />
-                  ) : (
+                  ) : visibleDocuments.length > 0 ? (
                     <div
                       key={`${documentView}-${tagFilterKey}-${selectedFolderId ?? 'home'}`}
                       className={`filr-view-enter ${
@@ -1205,7 +1261,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
                         />
                       ))}
                     </div>
-                  )}
+                  ) : null}
                 </section>
                 )}
               </>
@@ -1240,6 +1296,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
           email={email}
           theme={theme}
           plan={userPlan}
+          addonGb={addonGb}
           userId={userId}
           tags={tags}
           folders={folders}
