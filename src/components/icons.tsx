@@ -429,8 +429,8 @@ export function SelectAllIcon({ className }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M176 416 80 320 112 288" />
-      <path d="M448 160 320 288 240 208" />
+      <path d="M176 416l-144-96 32-32" />
+      <path d="M448 160L320 288 240 208" />
     </svg>
   )
 }
