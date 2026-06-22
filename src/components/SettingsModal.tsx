@@ -18,6 +18,7 @@ import {
   ExternalLinkIcon,
   LogOutIcon,
   RecoverIcon,
+  SelectAllIcon,
   ShareIcon,
   TagIcon,
   ToggleOptionIcon,
@@ -207,6 +208,13 @@ export default function SettingsModal({
             <div className="flex shrink-0 items-center gap-1">
               {subsheet === 'recently-deleted' ? (
                 <>
+                  <RecentlyDeletedHeaderButton
+                    disabled={!recentlyDeletedToolbar?.canSelectAll || recentlyDeletedToolbar.busy}
+                    title="Select all"
+                    onClick={() => recentlyDeletedToolbar?.selectAll()}
+                  >
+                    <SelectAllIcon className="h-4 w-4" />
+                  </RecentlyDeletedHeaderButton>
                   <RecentlyDeletedHeaderButton
                     disabled={!recentlyDeletedToolbar?.canRecover || recentlyDeletedToolbar.busy}
                     title={

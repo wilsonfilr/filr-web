@@ -16,6 +16,8 @@ import { applyFileItSuggestions } from './lib/applyFileIt'
 import type { FileItItem, FileItSuggestion } from './lib/fileItPaths'
 import {
   getStorageLimitBytes,
+  getStorageWarningPercent,
+  isStorageUsageAtWarningLevel,
   StorageLimitError,
   formatStorageSize,
 } from './lib/storageLimits'
@@ -29,6 +31,7 @@ import {
   fetchDocuments,
   fetchFolders,
   fetchTags,
+  getStorageUsage,
   moveDocument,
   moveFolder,
   renameDocument,
@@ -54,6 +57,7 @@ import AddTagDialog from './components/AddTagDialog'
 import RenameDialog from './components/RenameDialog'
 import NewFolderDialog from './components/NewFolderDialog'
 import FileItDialog from './components/FileItDialog'
+import StorageAlertDialog from './components/StorageAlertDialog'
 import ContextMenu, { type MenuAction } from './components/ContextMenu'
 import Snackbar, { type ToastState } from './components/Snackbar'
 import SortMenu from './components/SortMenu'
@@ -110,6 +114,10 @@ function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 }
 
+function storageWarningSessionKey(userId: string, isFreePlan: boolean): string {
+  return `filr-web-storage-warn-${isFreePlan ? 'free-80' : 'paid-90'}-${userId}`
+}
+
 function Workspace({ userId, email }: { userId: string; email: string | null }) {
   const [folders, setFolders] = useState<Folder[]>([])
   const [documents, setDocuments] = useState<Document[]>([])
@@ -155,6 +163,12 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [tagFilterOpen, setTagFilterOpen] = useState(false)
   const [activeTagIds, setActiveTagIds] = useState<string[]>([])
+  const [storageAlert, setStorageAlert] = useState<{
+    title: string
+    message: string
+    primaryLabel: string
+    onPrimary: () => void
+  } | null>(null)
 
   const mainRef = useRef<HTMLElement>(null)
   const sortMenuAnchorRef = useRef<HTMLDivElement>(null)
@@ -216,6 +230,83 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       cancelled = true
     }
   }, [userId])
+
+  const storageLimitBytes = useMemo(
+    () => getStorageLimitBytes(!isFreePlan, addonGb),
+    [addonGb, isFreePlan],
+  )
+
+  const openStorageUpgrade = useCallback(() => {
+    setSettingsInitialSection('account')
+    setSettingsInitialSubsheet(isFreePlan ? 'premium-upgrade' : 'storage-upgrade')
+    setSettingsOpen(true)
+    setStorageAlert(null)
+  }, [isFreePlan])
+
+  const showStorageLimitAlert = useCallback(
+    (limitBytes: number = storageLimitBytes) => {
+      const limitLabel = formatStorageSize(limitBytes)
+      if (isFreePlan) {
+        setStorageAlert({
+          title: 'Storage limit reached',
+          message: `You've used your ${limitLabel} of free storage. Upgrade to Filr Premium for more space.`,
+          primaryLabel: 'Upgrade',
+          onPrimary: openStorageUpgrade,
+        })
+        return
+      }
+      setStorageAlert({
+        title: 'Storage limit reached',
+        message: `You've reached your ${limitLabel} storage limit. Add more storage with a storage upgrade subscription.`,
+        primaryLabel: 'Get More Storage',
+        onPrimary: openStorageUpgrade,
+      })
+    },
+    [isFreePlan, openStorageUpgrade, storageLimitBytes],
+  )
+
+  const maybeShowStorageUsageWarning = useCallback(
+    async () => {
+      if (storageLimitBytes <= 0) {
+        return
+      }
+      try {
+        const used = await getStorageUsage(userId)
+        if (!isStorageUsageAtWarningLevel(used, storageLimitBytes, !isFreePlan)) {
+          return
+        }
+        const sessionKey = storageWarningSessionKey(userId, isFreePlan)
+        if (sessionStorage.getItem(sessionKey)) {
+          return
+        }
+        sessionStorage.setItem(sessionKey, '1')
+        const limitLabel = formatStorageSize(storageLimitBytes)
+        const warningPercent = getStorageWarningPercent(!isFreePlan)
+        if (isFreePlan) {
+          setStorageAlert({
+            title: 'Storage almost full',
+            message: `You've used at least ${warningPercent}% of your ${limitLabel} free storage. Upgrade to Filr Premium for more space.`,
+            primaryLabel: 'Upgrade',
+            onPrimary: openStorageUpgrade,
+          })
+          return
+        }
+        setStorageAlert({
+          title: 'Storage almost full',
+          message: `You've used at least ${warningPercent}% of your ${limitLabel} storage. Add more storage with a storage upgrade subscription.`,
+          primaryLabel: 'Get More Storage',
+          onPrimary: openStorageUpgrade,
+        })
+      } catch {
+        // Ignore usage check failures — hard limits still apply on upload/paste.
+      }
+    },
+    [isFreePlan, openStorageUpgrade, storageLimitBytes, userId],
+  )
+
+  useEffect(() => {
+    void maybeShowStorageUsageWarning()
+  }, [maybeShowStorageUsageWarning])
 
   // Live sync from mobile or other tabs — no manual refresh needed.
   useEffect(() => {
@@ -514,9 +605,12 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         await performMove(items, targetFolderId, { clearClipboard: true })
         return
       }
-      const created = await copyItemsToFolder(userId, items, targetFolderId, folders, documents)
+      const created = await copyItemsToFolder(userId, items, targetFolderId, folders, documents, {
+        storageLimitBytes: getStorageLimitBytes(!isFreePlan, addonGb),
+      })
       await load()
       clearSelection()
+      setClipboard(null)
       setToast({
         message:
           count === 1 ? `Copied “${itemName(items[0])}” to ${toName}` : `Copied ${count} items to ${toName}`,
@@ -525,9 +619,14 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
           await load()
         },
       })
+      void maybeShowStorageUsageWarning()
     } catch (err) {
       setToast(null)
-      setError(err instanceof Error ? err.message : 'Could not paste items.')
+      if (err instanceof StorageLimitError) {
+        showStorageLimitAlert(err.limitBytes)
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not paste items.')
+      }
     } finally {
       pasteInProgressRef.current = false
     }
@@ -753,13 +852,10 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
             message: `Uploaded ${pdfs.length} PDF${pdfs.length === 1 ? '' : 's'}. ${rejectedCount} non-PDF file${rejectedCount === 1 ? '' : 's'} skipped.`,
           })
         }
+        void maybeShowStorageUsageWarning()
       } catch (err) {
         if (err instanceof StorageLimitError) {
-          setError(
-            isFreePlan
-              ? `Storage limit reached (${formatStorageSize(err.limitBytes)}). Upgrade in the Filr app for more space.`
-              : `Storage limit reached (${formatStorageSize(err.limitBytes)}). Add more storage in the Filr app.`,
-          )
+          showStorageLimitAlert(err.limitBytes)
         } else {
           setError(err instanceof Error ? err.message : 'Upload failed.')
         }
@@ -767,7 +863,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         setUploading(false)
       }
     },
-    [addonGb, isFreePlan, userId, selectedFolderId, load],
+    [addonGb, isFreePlan, userId, selectedFolderId, load, maybeShowStorageUsageWarning, showStorageLimitAlert],
   )
 
   const externalFileDragActive = useExternalFileDrop(handleUpload)
@@ -1418,6 +1514,16 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
           onClose={() => setNewFolderParent(undefined)}
         />
       )}
+
+      {storageAlert ? (
+        <StorageAlertDialog
+          title={storageAlert.title}
+          message={storageAlert.message}
+          primaryLabel={storageAlert.primaryLabel}
+          onPrimary={storageAlert.onPrimary}
+          onClose={() => setStorageAlert(null)}
+        />
+      ) : null}
 
       {contextMenu && (
         <ContextMenu

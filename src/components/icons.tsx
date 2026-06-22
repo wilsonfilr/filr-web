@@ -416,6 +416,25 @@ export function RecoverIcon({ className }: IconProps) {
   )
 }
 
+/** Matches the app selection bar Select all icon (Ionicons checkmark-done-outline). */
+export function SelectAllIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 512 512"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="32"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M176 416 80 320 112 288" />
+      <path d="M448 160 320 288 240 208" />
+    </svg>
+  )
+}
+
 export function SunIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">

@@ -495,6 +495,64 @@ export async function permanentlyDeleteRecentlyDeleted(
   )
 }
 
+function documentStorageBytesFromListing(documentId: string, listing: Map<string, number>): number {
+  let total = listing.get(`${documentId}.pdf`) ?? 0
+  const pagePrefix = `${documentId}_p`
+  for (const [name, size] of listing) {
+    if (name.startsWith(pagePrefix) && name.endsWith('.jpg')) {
+      total += size
+    }
+  }
+  return total
+}
+
+async function listUserDocumentStorageSizes(userId: string): Promise<Map<string, number>> {
+  const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).list(userId, { limit: 1000 })
+  if (error || !data) return new Map()
+  const listing = new Map<string, number>()
+  for (const obj of data) {
+    if (obj.id != null) {
+      listing.set(obj.name, obj.metadata?.size ?? 0)
+    }
+  }
+  return listing
+}
+
+function resolveDocumentIdsForCopy(
+  items: DragItem[],
+  allFolders: Folder[],
+  allDocuments: Document[],
+): string[] {
+  const folderIds = items.filter((i) => i.type === 'folder').map((i) => i.id)
+  const docIds = new Set(items.filter((i) => i.type === 'document').map((i) => i.id))
+  const topLevelFolderIds = topLevelSelectedFolderIds(folderIds, allFolders)
+  const expandedFolderIds = expandFolderIdsWithDescendants(topLevelFolderIds, allFolders)
+  const folderDocIds = collectDocsInFolders(expandedFolderIds, allDocuments)
+  for (const docId of folderDocIds) {
+    docIds.delete(docId)
+  }
+  return [...new Set([...folderDocIds, ...docIds])]
+}
+
+/** Bytes that would be added to storage when copying these items (duplicate of PDFs + page images). */
+export async function estimateCopyItemsBytes(
+  userId: string,
+  items: DragItem[],
+  allFolders: Folder[],
+  allDocuments: Document[],
+): Promise<number> {
+  const documentIds = resolveDocumentIdsForCopy(items, allFolders, allDocuments)
+  if (documentIds.length === 0) {
+    return 0
+  }
+  const listing = await listUserDocumentStorageSizes(userId)
+  let total = 0
+  for (const documentId of documentIds) {
+    total += documentStorageBytesFromListing(documentId, listing)
+  }
+  return total
+}
+
 async function copyStorageObject(fromPath: string, toPath: string): Promise<void> {
   const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).download(fromPath)
   if (error) throw error
@@ -582,7 +640,16 @@ export async function copyItemsToFolder(
   targetFolderId: string | null,
   allFolders: Folder[],
   allDocuments: Document[],
+  options?: { storageLimitBytes?: number },
 ): Promise<CopyItemsResult> {
+  if (options?.storageLimitBytes != null) {
+    const additionalBytes = await estimateCopyItemsBytes(userId, items, allFolders, allDocuments)
+    const used = await getStorageUsage(userId)
+    if (wouldExceedStorageLimit(used, options.storageLimitBytes, additionalBytes)) {
+      throw new StorageLimitError(used, options.storageLimitBytes)
+    }
+  }
+
   const folderIds = items.filter((i) => i.type === 'folder').map((i) => i.id)
   const docIds = new Set(items.filter((i) => i.type === 'document').map((i) => i.id))
 

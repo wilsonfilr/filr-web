@@ -12,7 +12,9 @@ export type RecentlyDeletedToolbarState = {
   selectedCount: number
   canRecover: boolean
   canDelete: boolean
+  canSelectAll: boolean
   busy: boolean
+  selectAll: () => void
   recover: () => void
   deleteForever: () => void
 }
@@ -119,8 +121,13 @@ export default function RecentlyDeletedPanel({
     }
   }, [selectedItems, userId, loadItems, onChanged])
 
+  const selectAll = useCallback(() => {
+    setSelected(new Set(items.map((item) => item.id)))
+  }, [items])
+
   const canRecover = selectedItems().some((item) => item.kind === 'folder' || item.kind === 'document')
   const canDelete = selected.size > 0
+  const canSelectAll = items.length > 0 && !(items.length === 1 && selected.size === 1)
 
   useEffect(() => {
     if (!onToolbarChange) return
@@ -128,11 +135,13 @@ export default function RecentlyDeletedPanel({
       selectedCount: selected.size,
       canRecover,
       canDelete,
+      canSelectAll,
       busy,
+      selectAll,
       recover: () => void recoverSelected(),
       deleteForever: () => void deleteSelected(),
     })
-  }, [onToolbarChange, selected.size, canRecover, canDelete, busy, recoverSelected, deleteSelected])
+  }, [onToolbarChange, selected.size, canRecover, canDelete, canSelectAll, busy, selectAll, recoverSelected, deleteSelected])
 
   useEffect(() => {
     return () => onToolbarChange?.(null)
