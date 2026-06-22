@@ -416,21 +416,23 @@ export function RecoverIcon({ className }: IconProps) {
   )
 }
 
-/** Matches the app selection bar Select all icon (Ionicons checkmark-done-outline). */
+/** Select all — stacked checkboxes (reads clearly at header icon size). */
 export function SelectAllIcon({ className }: IconProps) {
   return (
     <svg
       className={className}
-      viewBox="0 0 512 512"
+      viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="32"
+      strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M176 416l-144-96 32-32" />
-      <path d="M448 160L320 288 240 208" />
+      <rect x="3" y="4" width="8" height="8" rx="1.5" />
+      <path d="M5.5 9 7 10.5 9.5 8" />
+      <rect x="9" y="10" width="12" height="12" rx="2" />
+      <path d="M12.5 15.5 14.5 17.5 18.5 13" />
     </svg>
   )
 }
