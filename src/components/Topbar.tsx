@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import type { Theme } from '../hooks/useTheme'
 import { SIDEBAR_PEEK, SIDEBAR_WIDTH } from '../lib/layout'
+import { UPLOAD_FILE_ACCEPT } from '../lib/uploadFiles'
 import { SearchIcon, ExportIcon, UpgradeCrownIcon, CloseIcon } from './icons'
 import { FilrLogoMark, FilrWordmark } from './brandLogos'
 import ProfileMenu from './ProfileMenu'
@@ -87,7 +88,7 @@ export default function Topbar({
       <input
         ref={fileInput}
         type="file"
-        accept="application/pdf"
+        accept={UPLOAD_FILE_ACCEPT}
         multiple
         className="hidden"
         onChange={(e) => {
@@ -121,7 +122,7 @@ export default function Topbar({
           className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-filr-text px-3 py-2 text-sm font-semibold text-filr-bg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <ExportIcon className="h-4 w-4" />
-          <span className="hidden sm:inline">{uploading ? 'Uploading…' : 'Upload PDF'}</span>
+          <span className="hidden sm:inline">{uploading ? 'Uploading…' : 'Upload'}</span>
         </button>
 
         <ProfileMenu

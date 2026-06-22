@@ -39,7 +39,7 @@ export function SearchIcon({ className }: IconProps) {
   )
 }
 
-/** Simple upload arrow — header Upload PDF button. */
+/** Simple upload arrow — header Upload button. */
 export function UploadIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -57,7 +57,7 @@ export function CloseIcon({ className }: IconProps) {
   )
 }
 
-/** App export/share icon — header Upload PDF. */
+/** App export/share icon — header Upload. */
 export function ExportIcon({ className }: IconProps) {
   return (
     <AppSvg className={className} viewBox="0 0 600 600">

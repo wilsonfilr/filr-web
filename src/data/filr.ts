@@ -17,6 +17,10 @@ function pdfStoragePath(userId: string, documentId: string): string {
   return `${userId}/${documentId}.pdf`
 }
 
+function pageImageStoragePath(userId: string, documentId: string, pageIndex: number): string {
+  return `${userId}/${documentId}_p${pageIndex}.jpg`
+}
+
 function normalizeTagIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return raw.filter((id): id is string => typeof id === 'string' && id.length > 0)
@@ -887,6 +891,53 @@ export async function uploadPdfDocument(
     .upload(pdfStoragePath(userId, id), file, {
       upsert: true,
       contentType: 'application/pdf',
+    })
+  if (uploadError) throw uploadError
+
+  const { error: insertError } = await supabase.from('documents').insert({
+    id,
+    user_id: userId,
+    folder_id: folderId,
+    title,
+    ocr_text: '',
+    tag_ids: [],
+  })
+  if (insertError) throw insertError
+
+  return {
+    id,
+    title,
+    folderId,
+    ocrText: '',
+    tagIds: [],
+    createdAt: new Date().toISOString(),
+  }
+}
+
+/** Upload a JPG/JPEG image: store as page 0 then create the document row (matches mobile scans). */
+export async function uploadImageDocument(
+  userId: string,
+  file: File,
+  folderId: string | null,
+  options?: { storageLimitBytes?: number },
+): Promise<Document> {
+  const id = crypto.randomUUID()
+  const baseTitle = file.name.replace(/\.jpe?g$/i, '').trim() || 'Untitled'
+  const siblings = await siblingDocumentTitles(userId, folderId)
+  const title = resolveUniqueName(baseTitle, siblings)
+
+  if (options?.storageLimitBytes != null) {
+    const used = await getStorageUsage(userId)
+    if (wouldExceedStorageLimit(used, options.storageLimitBytes, file.size)) {
+      throw new StorageLimitError(used, options.storageLimitBytes)
+    }
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from(DOCUMENTS_BUCKET)
+    .upload(pageImageStoragePath(userId, id, 0), file, {
+      upsert: true,
+      contentType: 'image/jpeg',
     })
   if (uploadError) throw uploadError
 

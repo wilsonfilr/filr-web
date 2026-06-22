@@ -40,6 +40,7 @@ import {
   setFolderTags,
   upsertTags,
   uploadPdfDocument,
+  uploadImageDocument,
 } from './data/filr'
 import AuthScreen from './components/AuthScreen'
 import MobileAppPrompt from './components/MobileAppPrompt'
@@ -52,6 +53,7 @@ import TagsModal from './components/TagsModal'
 import FileDropOverlay from './components/FileDropOverlay'
 import SettingsModal, { type SettingsSection, type SettingsSubsheet } from './components/SettingsModal'
 import { useExternalFileDrop } from './hooks/useExternalFileDrop'
+import { isPdfFile, isUploadableFile, UPLOAD_FILE_ACCEPT } from './lib/uploadFiles'
 import MoveDialog from './components/MoveDialog'
 import AddTagDialog from './components/AddTagDialog'
 import RenameDialog from './components/RenameDialog'
@@ -109,10 +111,6 @@ function parseKey(key: string): DragItem {
   return { type: key.slice(0, i) as 'document' | 'folder', id: key.slice(i + 1) }
 }
 const keyOf = (item: DragItem) => `${item.type}:${item.id}`
-
-function isPdfFile(file: File): boolean {
-  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-}
 
 function storageWarningSessionKey(userId: string, isFreePlan: boolean): string {
   return `filr-web-storage-warn-${isFreePlan ? 'free-80' : 'paid-90'}-${userId}`
@@ -824,16 +822,16 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   const handleUpload = useCallback(
     async (files: FileList) => {
       const all = Array.from(files)
-      const pdfs = all.filter(isPdfFile)
-      const rejectedCount = all.length - pdfs.length
+      const uploadable = all.filter(isUploadableFile)
+      const rejectedCount = all.length - uploadable.length
 
-      if (pdfs.length === 0) {
+      if (uploadable.length === 0) {
         if (rejectedCount > 0) {
           setToast({
             message:
               rejectedCount === 1
-                ? 'Only PDF files can be uploaded.'
-                : `${rejectedCount} files skipped — only PDF files are supported.`,
+                ? 'Only PDF and JPG files can be uploaded.'
+                : `${rejectedCount} files skipped — only PDF and JPG files are supported.`,
           })
         }
         return
@@ -843,13 +841,17 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       setError(null)
       try {
         const storageLimitBytes = getStorageLimitBytes(!isFreePlan, addonGb)
-        for (const file of pdfs) {
-          await uploadPdfDocument(userId, file, selectedFolderId, { storageLimitBytes })
+        for (const file of uploadable) {
+          if (isPdfFile(file)) {
+            await uploadPdfDocument(userId, file, selectedFolderId, { storageLimitBytes })
+          } else {
+            await uploadImageDocument(userId, file, selectedFolderId, { storageLimitBytes })
+          }
         }
         await load()
         if (rejectedCount > 0) {
           setToast({
-            message: `Uploaded ${pdfs.length} PDF${pdfs.length === 1 ? '' : 's'}. ${rejectedCount} non-PDF file${rejectedCount === 1 ? '' : 's'} skipped.`,
+            message: `Uploaded ${uploadable.length} file${uploadable.length === 1 ? '' : 's'}. ${rejectedCount} unsupported file${rejectedCount === 1 ? '' : 's'} skipped.`,
           })
         }
         void maybeShowStorageUsageWarning()
@@ -914,7 +916,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         onClick: () => void handleCreateFolder(selectedFolderId),
       },
       {
-        label: 'Upload PDF',
+        label: 'Upload',
         icon: <ExportIcon className="h-4 w-4" />,
         onClick: () => uploadInputRef.current?.click(),
       },
@@ -1121,7 +1123,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       <input
         ref={uploadInputRef}
         type="file"
-        accept="application/pdf"
+        accept={UPLOAD_FILE_ACCEPT}
         multiple
         className="hidden"
         onChange={(e) => {
@@ -1646,7 +1648,7 @@ function EmptyState({ isSearching, tagFiltered }: { isSearching: boolean; tagFil
           ? 'Try a different title or some words from the document.'
           : tagFiltered
             ? 'Try selecting different tags, or clear the tag filter.'
-            : 'Scan documents in the Filr app, or upload a PDF from this computer — they’ll appear here.'}
+            : 'Scan documents in the Filr app, or upload PDFs and JPGs from this computer — they’ll appear here.'}
       </p>
     </div>
   )

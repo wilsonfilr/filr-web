@@ -31,7 +31,7 @@ export default function FileDropOverlay({ visible, folderName, uploading }: Prop
           <UploadIcon className="h-7 w-7" />
         </div>
         <p className="text-lg font-semibold text-filr-text">
-          {uploading ? 'Uploading…' : 'Drop PDFs here'}
+          {uploading ? 'Uploading…' : 'Drop files here'}
         </p>
         <p className="mt-2 text-sm text-filr-muted">
           {uploading ? (
@@ -44,7 +44,7 @@ export default function FileDropOverlay({ visible, folderName, uploading }: Prop
           )}
         </p>
         {!uploading ? (
-          <p className="mt-3 text-xs text-filr-muted/80">PDF files only</p>
+          <p className="mt-3 text-xs text-filr-muted/80">PDF or JPG</p>
         ) : null}
       </div>
     </div>
