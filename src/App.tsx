@@ -1562,6 +1562,7 @@ function BreadcrumbCrumb({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       onDragOver={(e) => {
         if (droppable) {
@@ -1571,7 +1572,7 @@ function BreadcrumbCrumb({
       }}
       onDragLeave={onLeave}
       onDrop={onDrop}
-      className={`inline-flex items-center overflow-visible rounded py-0.5 pl-1 pr-1.5 transition hover:text-filr-text ${
+      className={`inline-flex cursor-pointer items-center overflow-visible rounded py-0.5 pl-1 pr-1.5 transition hover:text-filr-text ${
         icon ? 'gap-2' : 'px-1.5'
       } ${
         over
