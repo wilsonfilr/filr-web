@@ -158,9 +158,11 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
 
   const mainRef = useRef<HTMLElement>(null)
   const sortMenuAnchorRef = useRef<HTMLDivElement>(null)
+  const isFirstLoadRef = useRef(true)
   const pasteInProgressRef = useRef(false)
   const syncCountRef = useRef(0)
   const selectionAnchorRef = useRef<string | null>(null)
+  const [pasteBusy, setPasteBusy] = useState<{ message: string } | null>(null)
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
 
   const load = useCallback(async () => {
@@ -507,6 +509,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       count === 1 ? `${verb} “${itemName(items[0])}” to ${toName}…` : `${verb} ${count} items to ${toName}…`
 
     pasteInProgressRef.current = true
+    setPasteBusy({ message: progressMessage })
     setToast({ message: progressMessage, loading: true })
     try {
       if (mode === 'cut') {
@@ -528,8 +531,16 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       setToast(null)
       setError(err instanceof Error ? err.message : 'Could not paste items.')
     } finally {
+      setPasteBusy(null)
       pasteInProgressRef.current = false
     }
+  }
+
+  function schedulePaste(targetFolderId: string | null) {
+    setContextMenu(null)
+    requestAnimationFrame(() => {
+      void performPaste(targetFolderId)
+    })
   }
 
   function performCopy(items: DragItem[]) {
@@ -783,7 +794,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         {
           label: 'Paste into this folder',
           icon: <PasteIcon className="h-4 w-4" />,
-          onClick: () => void performPaste(item.id),
+          onClick: () => schedulePaste(item.id),
         },
         ...actions,
       ]
@@ -800,7 +811,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       actions.push({
         label: 'Paste',
         icon: <PasteIcon className="h-4 w-4" />,
-        onClick: () => void performPaste(selectedFolderId),
+        onClick: () => schedulePaste(selectedFolderId),
       })
     }
     actions.push(
@@ -911,7 +922,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         } else if (e.key === 'v' || e.key === 'V') {
           if (!clipboard?.items.length) return
           e.preventDefault()
-          void performPaste(selectedFolderId)
+          void schedulePaste(selectedFolderId)
         }
         return
       }
@@ -995,6 +1006,8 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         email={email}
         uploading={uploading}
         syncing={syncing}
+        pasteBusy={pasteBusy}
+        clipboardCount={clipboard?.items.length ?? 0}
         onUpload={handleUpload}
         onSignOut={handleSignOut}
         theme={theme}
@@ -1060,6 +1073,19 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
             <LibraryLoadingState />
           ) : (
           <div className="mx-auto max-w-6xl px-6 py-6">
+            {pasteBusy ? (
+              <div
+                className="mb-4 flex items-center gap-3 rounded-xl border border-filr-accent/35 bg-filr-accent/10 px-4 py-3"
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-filr-border border-t-filr-accent"
+                  aria-hidden
+                />
+                <span className="text-sm font-medium text-filr-text">{pasteBusy.message}</span>
+              </div>
+            ) : null}
             {/* Breadcrumbs, sort, and tag filter */}
             <div className="mb-5" data-no-marquee>
               <div className="flex flex-wrap items-center gap-2">
