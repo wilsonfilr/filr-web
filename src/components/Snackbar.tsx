@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 export type ToastState = {
   message: string
   undo?: () => void
+  /** Show a spinner and keep the snackbar visible until replaced or dismissed. */
+  loading?: boolean
 }
 
 export default function Snackbar({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
@@ -13,6 +15,9 @@ export default function Snackbar({ toast, onDismiss }: { toast: ToastState; onDi
   // Re-arm only when the toast itself changes, not on every parent re-render.
   useEffect(() => {
     setLeaving(false)
+    if (toast.loading) {
+      return
+    }
     const hide = setTimeout(() => setLeaving(true), 4200)
     const remove = setTimeout(() => dismissRef.current(), 4500)
     return () => {
@@ -28,6 +33,12 @@ export default function Snackbar({ toast, onDismiss }: { toast: ToastState; onDi
           leaving ? 'translate-y-3 opacity-0' : 'translate-y-0 opacity-100'
         }`}
       >
+        {toast.loading ? (
+          <span
+            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-filr-border border-t-filr-accent"
+            aria-hidden
+          />
+        ) : null}
         <span className="text-sm text-filr-text">{toast.message}</span>
         {toast.undo && (
           <button

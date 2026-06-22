@@ -158,7 +158,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
 
   const mainRef = useRef<HTMLElement>(null)
   const sortMenuAnchorRef = useRef<HTMLDivElement>(null)
-  const isFirstLoadRef = useRef(true)
+  const pasteInProgressRef = useRef(false)
   const syncCountRef = useRef(0)
   const selectionAnchorRef = useRef<string | null>(null)
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
@@ -483,12 +483,13 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         },
       })
     } catch (err) {
+      setToast(null)
       setError(err instanceof Error ? err.message : 'Could not move item.')
     }
   }
 
   async function performPaste(targetFolderId: string | null) {
-    if (!clipboard?.items.length) return
+    if (!clipboard?.items.length || pasteInProgressRef.current) return
     if (wouldPasteIntoSameFolder(clipboard.items, targetFolderId, foldersById, docsById)) {
       setToast({ message: "Can't paste into the same folder." })
       return
@@ -497,28 +498,37 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       setToast({ message: "Can't paste here." })
       return
     }
+    const items = clipboard.items
+    const mode = clipboard.mode
     const toName = targetFolderId == null ? 'Home' : (foldersById.get(targetFolderId)?.name ?? 'folder')
+    const count = items.length
+    const verb = mode === 'cut' ? 'Moving' : 'Pasting'
+    const progressMessage =
+      count === 1 ? `${verb} “${itemName(items[0])}” to ${toName}…` : `${verb} ${count} items to ${toName}…`
+
+    pasteInProgressRef.current = true
+    setToast({ message: progressMessage, loading: true })
     try {
-      if (clipboard.mode === 'cut') {
-        await performMove(clipboard.items, targetFolderId, { clearClipboard: true })
+      if (mode === 'cut') {
+        await performMove(items, targetFolderId, { clearClipboard: true })
         return
       }
-      const created = await copyItemsToFolder(userId, clipboard.items, targetFolderId, folders, documents)
+      const created = await copyItemsToFolder(userId, items, targetFolderId, folders, documents)
       await load()
       clearSelection()
-      const count = clipboard.items.length
       setToast({
         message:
-          count === 1
-            ? `Copied “${itemName(clipboard.items[0])}” to ${toName}`
-            : `Copied ${count} items to ${toName}`,
+          count === 1 ? `Copied “${itemName(items[0])}” to ${toName}` : `Copied ${count} items to ${toName}`,
         undo: async () => {
           await removeCopiedItems(userId, created)
           await load()
         },
       })
     } catch (err) {
+      setToast(null)
       setError(err instanceof Error ? err.message : 'Could not paste items.')
+    } finally {
+      pasteInProgressRef.current = false
     }
   }
 
