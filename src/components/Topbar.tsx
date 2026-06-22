@@ -11,8 +11,6 @@ type Props = {
   email: string | null
   uploading: boolean
   syncing: boolean
-  pasteBusy: { message: string } | null
-  clipboardCount: number
   onUpload: (files: FileList) => void
   onSignOut: () => void
   theme: Theme
@@ -30,8 +28,6 @@ export default function Topbar({
   email,
   uploading,
   syncing,
-  pasteBusy,
-  clipboardCount,
   onUpload,
   onSignOut,
   theme,
@@ -100,19 +96,6 @@ export default function Topbar({
         }}
       />
       <div className="absolute right-4 z-10 flex shrink-0 items-center gap-3">
-        {pasteBusy ? (
-          <span className="flex max-w-[min(280px,40vw)] items-center gap-2 text-sm font-medium text-filr-accent" role="status">
-            <span
-              className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-filr-border border-t-filr-accent"
-              aria-hidden
-            />
-            <span className="truncate">{pasteBusy.message}</span>
-          </span>
-        ) : clipboardCount > 0 ? (
-          <span className="hidden text-sm text-filr-muted sm:inline" aria-live="polite">
-            {clipboardCount === 1 ? '1 item copied' : `${clipboardCount} items copied`}
-          </span>
-        ) : null}
         {syncing ? (
           <span
             className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-filr-border border-t-filr-accent"
