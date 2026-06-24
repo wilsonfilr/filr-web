@@ -4,7 +4,6 @@ export const PREMIUM_PLAN_FEATURES = [
   '5 GB storage',
   'Unlimited document scans',
   'Smart Filing',
-  'Vault',
   'Full-text search',
   'Sync across all your devices',
 ] as const

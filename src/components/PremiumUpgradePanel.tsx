@@ -64,7 +64,7 @@ export default function PremiumUpgradePanel({
               <p className="text-xs font-semibold uppercase tracking-wide text-[#6DAFEF]">Upgrade</p>
               <h3 className="mt-1 text-xl font-bold leading-tight text-filr-text">Unlock Filr Premium</h3>
               <p className="mt-2 text-sm leading-relaxed text-filr-muted">
-                Scan, organize, and find every document — with Smart Filing, Vault, and full-text search.
+                Scan, organize, and find every document — with Smart Filing and full-text search.
               </p>
             </div>
           </div>
