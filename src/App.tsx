@@ -844,11 +844,16 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         const storageLimitBytes = getStorageLimitBytes(!isFreePlan, addonGb)
         for (const file of uploadable) {
           if (isPdfFile(file)) {
-            await uploadPdfDocument(userId, file, selectedFolderId, { storageLimitBytes })
+            await uploadPdfDocument(userId, file, selectedFolderId, {
+              storageLimitBytes,
+              onStatus: (message) => setToast({ message, loading: true }),
+            })
           } else {
+            setToast({ message: 'Uploading...', loading: true })
             await uploadImageDocument(userId, file, selectedFolderId, { storageLimitBytes })
           }
         }
+        setToast(null)
         await load()
         if (rejectedCount > 0) {
           setToast({

@@ -1,4 +1,5 @@
 import { supabase, DOCUMENTS_BUCKET } from '../lib/supabase'
+import { extractPdfTextFromFile } from '../lib/pdfText'
 import { StorageLimitError, wouldExceedStorageLimit } from '../lib/storageLimits'
 import { resolveUniqueName } from '../lib/resolveUniqueName'
 import {
@@ -872,7 +873,7 @@ export async function uploadPdfDocument(
   userId: string,
   file: File,
   folderId: string | null,
-  options?: { storageLimitBytes?: number },
+  options?: { storageLimitBytes?: number; onStatus?: (message: string) => void },
 ): Promise<Document> {
   const id = crypto.randomUUID()
   const baseTitle = file.name.replace(/\.pdf$/i, '').trim() || 'Untitled'
@@ -886,6 +887,10 @@ export async function uploadPdfDocument(
     }
   }
 
+  options?.onStatus?.('Reading document...')
+  const extractedText = await extractPdfTextFromFile(file)
+
+  options?.onStatus?.('Uploading...')
   const { error: uploadError } = await supabase.storage
     .from(DOCUMENTS_BUCKET)
     .upload(pdfStoragePath(userId, id), file, {
@@ -899,7 +904,7 @@ export async function uploadPdfDocument(
     user_id: userId,
     folder_id: folderId,
     title,
-    ocr_text: '',
+    ocr_text: extractedText,
     tag_ids: [],
   })
   if (insertError) throw insertError
@@ -908,7 +913,7 @@ export async function uploadPdfDocument(
     id,
     title,
     folderId,
-    ocrText: '',
+    ocrText: extractedText,
     tagIds: [],
     createdAt: new Date().toISOString(),
   }
