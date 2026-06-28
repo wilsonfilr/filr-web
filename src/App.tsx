@@ -42,6 +42,7 @@ import {
   uploadPdfDocument,
   uploadImageDocument,
 } from './data/filr'
+import { deleteAccount } from './lib/authService'
 import AuthScreen from './components/AuthScreen'
 import MobileAppPrompt from './components/MobileAppPrompt'
 import { useDeviceKind } from './hooks/useDeviceKind'
@@ -877,6 +878,12 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
     await supabase.auth.signOut()
   }
 
+  async function handleDeleteAccount() {
+    await deleteAccount()
+    setSettingsOpen(false)
+    setSettingsInitialSubsheet(null)
+  }
+
   // ---- Context menu ----
   function openContextMenu(e: React.MouseEvent, item: DragItem) {
     e.preventDefault()
@@ -1459,6 +1466,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
           onThemeChange={setTheme}
           onLibraryChanged={() => void load()}
           onSignOut={handleSignOut}
+          onDeleteAccount={handleDeleteAccount}
           onClose={() => {
             setSettingsOpen(false)
             setSettingsInitialSubsheet(null)

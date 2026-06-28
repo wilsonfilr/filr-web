@@ -88,6 +88,7 @@ type Props = {
   onThemeChange: (t: Theme) => void
   onLibraryChanged: () => void
   onSignOut: () => void
+  onDeleteAccount: () => Promise<void>
   onClose: () => void
 }
 
@@ -105,6 +106,7 @@ export default function SettingsModal({
   onThemeChange,
   onLibraryChanged,
   onSignOut,
+  onDeleteAccount,
   onClose,
 }: Props) {
   const [active, setActive] = useState<SettingsSection>(initialSection)
@@ -301,6 +303,7 @@ export default function SettingsModal({
                   email={email}
                   plan={plan}
                   onSignOut={onSignOut}
+                  onDeleteAccount={onDeleteAccount}
                   onOpenPlan={() => setSubsheet('plan')}
                   onOpenPremiumUpgrade={openPremiumUpgrade}
                 />
@@ -440,30 +443,63 @@ function AccountSection({
   email,
   plan,
   onSignOut,
+  onDeleteAccount,
   onOpenPlan,
   onOpenPremiumUpgrade,
 }: {
   email: string | null
   plan: 'free' | 'premium'
   onSignOut: () => void
+  onDeleteAccount: () => Promise<void>
   onOpenPlan: () => void
   onOpenPremiumUpgrade: () => void
 }) {
   const isFree = plan === 'free'
+  const [deleteStep, setDeleteStep] = useState<'prompt' | 'confirm' | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function confirmDeleteAccount() {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await onDeleteAccount()
+      setDeleteStep(null)
+    } catch {
+      setDeleteError('Could not delete account. Please try again.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <>
       <SectionLabel>Account</SectionLabel>
       <Card>
         <Row label={email ?? 'Not signed in'} />
-        <div className="px-4 py-3">
+        <div className="space-y-3 px-4 py-3">
           <button
             type="button"
             onClick={onSignOut}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-filr-border px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/10"
+            disabled={deleting}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-filr-border px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/10 disabled:opacity-60"
           >
             <LogOutIcon className="h-4 w-4" />
             Log out
           </button>
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteError(null)
+                setDeleteStep('prompt')
+              }}
+              disabled={deleting}
+              className="cursor-pointer text-sm font-semibold text-red-400 transition hover:text-red-300 disabled:opacity-60"
+            >
+              Delete account
+            </button>
+          </div>
         </div>
       </Card>
 
@@ -507,7 +543,102 @@ function AccountSection({
           )}
         </div>
       </div>
+
+      {deleteStep === 'prompt' ? (
+        <ConfirmDialog
+          title="Delete account?"
+          message="All your documents, folders, tags, and ID Vault data will be permanently deleted. This cannot be undone."
+          confirmLabel="Delete Account"
+          destructive
+          busy={deleting}
+          onCancel={() => setDeleteStep(null)}
+          onConfirm={() => setDeleteStep('confirm')}
+        />
+      ) : null}
+
+      {deleteStep === 'confirm' ? (
+        <ConfirmDialog
+          title="Are you sure?"
+          message="This will permanently erase your Filr account and all your data. You will be signed out immediately."
+          confirmLabel="Yes, Delete Permanently"
+          destructive
+          busy={deleting}
+          error={deleteError}
+          onCancel={() => {
+            setDeleteStep('prompt')
+            setDeleteError(null)
+          }}
+          onConfirm={() => void confirmDeleteAccount()}
+        />
+      ) : null}
     </>
+  )
+}
+
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  destructive = false,
+  busy = false,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  title: string
+  message: string
+  confirmLabel: string
+  destructive?: boolean
+  busy?: boolean
+  error?: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={busy ? undefined : onCancel}
+    >
+      <div
+        className="w-full max-w-sm overflow-hidden rounded-2xl border border-filr-border bg-filr-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
+      >
+        <div className="space-y-2 px-5 py-5">
+          <h2 id="confirm-dialog-title" className="text-base font-semibold text-filr-text">
+            {title}
+          </h2>
+          <p id="confirm-dialog-message" className="text-sm leading-relaxed text-filr-muted">
+            {message}
+          </p>
+          {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        </div>
+        <footer className="flex justify-end gap-2 border-t border-filr-border px-5 py-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border border-filr-border px-3 py-2 text-sm font-medium text-filr-muted transition hover:text-filr-text disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-60 ${
+              destructive
+                ? 'bg-red-500 text-white hover:bg-red-400'
+                : 'bg-filr-accent text-filr-accent-fg hover:opacity-90'
+            }`}
+          >
+            {busy ? 'Deleting…' : confirmLabel}
+          </button>
+        </footer>
+      </div>
+    </div>
   )
 }
 
