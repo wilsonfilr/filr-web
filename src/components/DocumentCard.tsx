@@ -5,7 +5,6 @@ import { renderPdfFirstPage } from '../lib/pdfThumb'
 import {
   downloadStorageObjectUrl,
   revokeStorageObjectUrl,
-  storageObjectExists,
 } from '../lib/storageAssets'
 import { type DragItem, setDragData } from '../lib/dnd'
 import { CheckIcon, DocIcon } from './icons'
@@ -52,30 +51,26 @@ export default function DocumentCard({
     setThumbUrl(null)
     ;(async () => {
       const pagePath = `${userId}/${doc.id}_p0.jpg`
-      if (await storageObjectExists(pagePath)) {
-        const pageUrl = await downloadStorageObjectUrl(pagePath)
-        if (pageUrl) objectUrls.push(pageUrl)
-        if (!active) return
-        if (pageUrl) {
-          setThumbUrl(pageUrl)
-          setLoading(false)
-          return
-        }
+      const pageUrl = await downloadStorageObjectUrl(pagePath, { silent: true })
+      if (pageUrl) objectUrls.push(pageUrl)
+      if (!active) return
+      if (pageUrl) {
+        setThumbUrl(pageUrl)
+        setLoading(false)
+        return
       }
 
       const pdfPath = pdfStoragePath(userId, doc.id)
-      if (await storageObjectExists(pdfPath)) {
-        const pdfObjectUrl = await downloadStorageObjectUrl(pdfPath)
-        if (pdfObjectUrl) objectUrls.push(pdfObjectUrl)
+      const pdfObjectUrl = await downloadStorageObjectUrl(pdfPath, { silent: true })
+      if (pdfObjectUrl) objectUrls.push(pdfObjectUrl)
+      if (!active) return
+      if (pdfObjectUrl) {
+        const data = await renderPdfFirstPage(doc.id, pdfObjectUrl)
         if (!active) return
-        if (pdfObjectUrl) {
-          const data = await renderPdfFirstPage(doc.id, pdfObjectUrl)
-          if (!active) return
-          if (data) {
-            setThumbUrl(data)
-            setLoading(false)
-            return
-          }
+        if (data) {
+          setThumbUrl(data)
+          setLoading(false)
+          return
         }
       }
       setLoading(false)

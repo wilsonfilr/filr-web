@@ -17,19 +17,30 @@ type OcrSpaceResponse = {
 }
 
 function parseOcrSpaceResponse(payload: OcrSpaceResponse | null): string {
-  if (!payload || payload.IsErroredOnProcessing) {
-    const message = Array.isArray(payload?.ErrorMessage)
-      ? payload.ErrorMessage.join(' ')
-      : payload?.ErrorMessage || payload?.ErrorDetails || 'OCR.space rejected this file.'
-    console.warn('[pdfOcr] provider error', message)
-    return ''
-  }
-  const text = (payload.ParsedResults ?? [])
+  const text = (payload?.ParsedResults ?? [])
     .map((r) => r.ParsedText ?? '')
     .filter((t) => t.trim().length > 0)
     .join('\n')
     .trim()
-  return text.slice(0, MAX_OCR_TEXT_CHARS)
+    .slice(0, MAX_OCR_TEXT_CHARS)
+
+  if (text.length > 0) {
+    if (payload?.IsErroredOnProcessing) {
+      const message = Array.isArray(payload?.ErrorMessage)
+        ? payload.ErrorMessage.join(' ')
+        : payload?.ErrorMessage || payload?.ErrorDetails || 'OCR.space partial result'
+      console.warn('[pdfOcr] using partial OCR result despite provider error', message)
+    }
+    return text
+  }
+
+  if (payload?.IsErroredOnProcessing) {
+    const message = Array.isArray(payload?.ErrorMessage)
+      ? payload.ErrorMessage.join(' ')
+      : payload?.ErrorMessage || payload?.ErrorDetails || 'OCR.space rejected this file.'
+    console.warn('[pdfOcr] provider error', message)
+  }
+  return ''
 }
 
 export async function extractPdfTextViaOcrSpace(file: File): Promise<string> {

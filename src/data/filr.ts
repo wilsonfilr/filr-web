@@ -1,5 +1,5 @@
 import { supabase, DOCUMENTS_BUCKET } from '../lib/supabase'
-import { storageObjectExists } from '../lib/storageAssets'
+import { downloadStorageObject } from '../lib/storageAssets'
 import { StorageLimitError, wouldExceedStorageLimit } from '../lib/storageLimits'
 import { resolveUniqueName } from '../lib/resolveUniqueName'
 import {
@@ -100,7 +100,7 @@ export async function fetchTags(userId: string): Promise<UserTag[]> {
     .map((row) => ({ id: row.id, label: row.label, color: row.color ?? 'neutral' }))
 }
 
-/** List storage paths for a document (pdf + page images) using exists checks. */
+/** List storage paths for a document (pdf + page images) via silent download probes. */
 export async function listDocumentAssets(
   userId: string,
   documentId: string,
@@ -109,14 +109,18 @@ export async function listDocumentAssets(
   const pagePaths: string[] = []
   for (let i = 0; i < 50; i++) {
     const path = pageImageStoragePath(userId, documentId, i)
-    if (!(await storageObjectExists(path))) break
+    const blob = await downloadStorageObject(path, { silent: true })
+    if (!blob) break
     pagePaths.push(path)
   }
   return { pdfPath, pagePaths }
 }
 
 async function sumStorageInPrefix(prefix: string): Promise<number> {
-  const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).list(prefix, { limit: 1000 })
+  const normalized = prefix.endsWith('/') ? prefix : `${prefix}/`
+  const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).list(normalized, {
+    limit: 1000,
+  })
   if (error || !data) return 0
   let total = 0
   for (const item of data) {
@@ -129,9 +133,17 @@ async function sumStorageInPrefix(prefix: string): Promise<number> {
   return total
 }
 
-/** Total bytes stored in the documents bucket for a user (PDFs, page images, vault photos). */
-export async function getStorageUsage(userId: string): Promise<number> {
-  return sumStorageInPrefix(`${userId}/`)
+/** Total bytes stored in the documents bucket for the signed-in user. */
+export async function getStorageUsage(_userId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('get_my_storage_usage_bytes')
+  if (!error && data != null) {
+    const parsed = Number(data)
+    if (Number.isFinite(parsed)) return Math.max(0, parsed)
+  }
+  if (error) {
+    console.warn('[filr] get_my_storage_usage_bytes failed, falling back to list', error.message)
+  }
+  return sumStorageInPrefix(`${_userId}/`)
 }
 
 export async function createSignedUrl(path: string, expiresInSeconds = 3600): Promise<string | null> {
@@ -495,7 +507,9 @@ function documentStorageBytesFromListing(documentId: string, listing: Map<string
 }
 
 async function listUserDocumentStorageSizes(userId: string): Promise<Map<string, number>> {
-  const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).list(userId, { limit: 1000 })
+  const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).list(`${userId}/`, {
+    limit: 1000,
+  })
   if (error || !data) return new Map()
   const listing = new Map<string, number>()
   for (const obj of data) {
@@ -851,23 +865,19 @@ export async function moveDocument(
   if (error) throw error
 }
 
-function schedulePdfOcrUpdate(
-  userId: string,
-  documentId: string,
-  file: File,
-  storagePath: string,
-): void {
+function schedulePdfOcrUpdate(userId: string, documentId: string, file: File): void {
   void (async () => {
     try {
-      const { extractPdfTextViaOcrSpace, extractPdfTextViaOcrSpaceUrl } = await import('../lib/pdfOcr')
-      let text = await extractPdfTextViaOcrSpace(file)
+      const { extractPdfTextFromFile } = await import('../lib/pdfText')
+      const { extractPdfTextViaOcrSpace } = await import('../lib/pdfOcr')
+
+      let text = await extractPdfTextFromFile(file)
       if (!text) {
-        const signedUrl = await createSignedUrl(storagePath, 600)
-        if (signedUrl) {
-          text = await extractPdfTextViaOcrSpaceUrl(signedUrl)
-        }
+        console.log('[filr] pdf.js returned no text, falling back to OCR.space', { documentId })
+        text = await extractPdfTextViaOcrSpace(file)
       }
       if (!text) return
+
       const { error } = await supabase
         .from('documents')
         .update({ ocr_text: text })
@@ -930,7 +940,7 @@ export async function uploadPdfDocument(
   })
   if (insertError) throw insertError
 
-  schedulePdfOcrUpdate(userId, id, file, storagePath)
+  schedulePdfOcrUpdate(userId, id, file)
 
   return {
     id,

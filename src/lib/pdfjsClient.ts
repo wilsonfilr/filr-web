@@ -1,5 +1,5 @@
 /**
- * Shared pdf.js loader for thumbnail rendering only.
+ * Shared pdf.js loader for text extraction and thumbnail rendering.
  */
 
 type PdfJs = typeof import('pdfjs-dist')

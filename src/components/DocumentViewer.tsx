@@ -10,7 +10,6 @@ import {
 import {
   downloadStorageObjectUrl,
   revokeStorageObjectUrl,
-  storageObjectExists,
 } from '../lib/storageAssets'
 import { CloseIcon, DownloadIcon, TrashIcon } from './icons'
 import TagChip from './TagChip'
@@ -50,10 +49,8 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
 
       let pdf: string | null = null
       const path = pdfPath ?? pdfStoragePath(userId, doc.id)
-      if (await storageObjectExists(path)) {
-        pdf = await downloadStorageObjectUrl(path)
-        if (pdf) objectUrls.push(pdf)
-      }
+      pdf = await downloadStorageObjectUrl(path, { silent: true })
+      if (pdf) objectUrls.push(pdf)
 
       if (!active) return
       setHasPdf(Boolean(pdf))
