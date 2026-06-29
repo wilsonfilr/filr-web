@@ -152,6 +152,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; actions: MenuAction[] } | null>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+  const [webUploadedPdfIds, setWebUploadedPdfIds] = useState<Set<string>>(() => new Set())
   const [moveItems, setMoveItems] = useState<DragItem[] | null>(null)
   const [addTagItems, setAddTagItems] = useState<DragItem[] | null>(null)
   const [renameItem, setRenameItem] = useState<DragItem | null>(null)
@@ -842,20 +843,36 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       setError(null)
       try {
         const storageLimitBytes = getStorageLimitBytes(!isFreePlan, addonGb)
+        const uploadedPdfIds: string[] = []
         for (const file of uploadable) {
           if (isPdfFile(file)) {
-            await uploadPdfDocument(userId, file, selectedFolderId, {
+            const created = await uploadPdfDocument(userId, file, selectedFolderId, {
               storageLimitBytes,
               onStatus: (message) => setToast({ message, loading: true }),
             })
+            uploadedPdfIds.push(created.id)
           } else {
             setToast({ message: 'Uploading...', loading: true })
             await uploadImageDocument(userId, file, selectedFolderId, { storageLimitBytes })
           }
         }
+        if (uploadedPdfIds.length > 0) {
+          setWebUploadedPdfIds((prev) => {
+            const next = new Set(prev)
+            for (const id of uploadedPdfIds) next.add(id)
+            return next
+          })
+        }
         setToast(null)
         await load()
-        if (rejectedCount > 0) {
+        if (uploadedPdfIds.length > 0) {
+          setToast({
+            message:
+              uploadedPdfIds.length === 1
+                ? 'PDF uploaded. Tap ℹ on the document for details.'
+                : `${uploadedPdfIds.length} PDFs uploaded. Tap ℹ on each document for details.`,
+          })
+        } else if (rejectedCount > 0) {
           setToast({
             message: `Uploaded ${uploadable.length} file${uploadable.length === 1 ? '' : 's'}. ${rejectedCount} unsupported file${rejectedCount === 1 ? '' : 's'} skipped.`,
           })
@@ -1415,6 +1432,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
                           userId={userId}
                           tagsById={tagsById}
                           selected={isSelected({ type: 'document', id: doc.id })}
+                          showWebUploadInfo={webUploadedPdfIds.has(doc.id)}
                           view={documentView}
                           listRowClass={LIST_ROW}
                           onOpen={setSelectedDoc}

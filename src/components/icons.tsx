@@ -57,6 +57,15 @@ export function CloseIcon({ className }: IconProps) {
   )
 }
 
+export function InfoIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 10v6M12 7h.01" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /** App export/share icon — header Upload. */
 export function ExportIcon({ className }: IconProps) {
   return (

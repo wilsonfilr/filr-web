@@ -865,35 +865,6 @@ export async function moveDocument(
   if (error) throw error
 }
 
-function schedulePdfOcrUpdate(userId: string, documentId: string, file: File): void {
-  void (async () => {
-    try {
-      const { extractPdfTextFromFile } = await import('../lib/pdfText')
-      const { extractPdfTextViaOcrSpace } = await import('../lib/pdfOcr')
-
-      let text = await extractPdfTextFromFile(file)
-      if (!text) {
-        console.log('[filr] pdf.js returned no text, falling back to OCR.space', { documentId })
-        text = await extractPdfTextViaOcrSpace(file)
-      }
-      if (!text) return
-
-      const { error } = await supabase
-        .from('documents')
-        .update({ ocr_text: text })
-        .eq('user_id', userId)
-        .eq('id', documentId)
-      if (error) {
-        console.warn('[filr] background OCR update failed', { documentId, error: error.message })
-      } else {
-        console.log('[filr] background OCR update saved', { documentId, chars: text.length })
-      }
-    } catch (err) {
-      console.warn('[filr] background OCR failed', err)
-    }
-  })()
-}
-
 /** Upload a PDF picked on the computer: store the file then create the document row. */
 export async function uploadPdfDocument(
   userId: string,
@@ -915,19 +886,12 @@ export async function uploadPdfDocument(
 
   options?.onStatus?.('Uploading...')
   const storagePath = pdfStoragePath(userId, id)
-  const { data: uploadData, error: uploadError } = await supabase.storage
+  const { error: uploadError } = await supabase.storage
     .from(DOCUMENTS_BUCKET)
     .upload(storagePath, file, {
       upsert: true,
       contentType: 'application/pdf',
     })
-  console.log('[filr] uploadPdfDocument storage upload', {
-    documentId: id,
-    storagePath,
-    fileSize: file.size,
-    uploadError: uploadError?.message ?? null,
-    uploadData,
-  })
   if (uploadError) throw uploadError
 
   const { error: insertError } = await supabase.from('documents').insert({
@@ -939,8 +903,6 @@ export async function uploadPdfDocument(
     tag_ids: [],
   })
   if (insertError) throw insertError
-
-  schedulePdfOcrUpdate(userId, id, file)
 
   return {
     id,

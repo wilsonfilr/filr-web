@@ -9,12 +9,14 @@ import {
 import { type DragItem, setDragData } from '../lib/dnd'
 import { CheckIcon, DocIcon } from './icons'
 import TagChip from './TagChip'
+import WebUploadInfoTip from './WebUploadInfoTip'
 
 type Props = {
   doc: Document
   userId: string
   tagsById: Map<string, UserTag>
   selected: boolean
+  showWebUploadInfo?: boolean
   view?: 'grid' | 'list'
   listRowClass?: string
   onOpen: (doc: Document) => void
@@ -32,6 +34,7 @@ export default function DocumentCard({
   selected,
   view = 'grid',
   listRowClass = 'flex cursor-pointer items-center gap-3 rounded-xl border bg-filr-surface px-4 py-3 text-left transition',
+  showWebUploadInfo = false,
   onOpen,
   onItemSelect,
   onContextMenu,
@@ -127,7 +130,10 @@ export default function DocumentCard({
             <DocIcon className="h-5 w-5 text-filr-muted/50" />
           )}
         </div>
-        <p className="min-w-0 flex-1 truncate text-sm font-medium text-filr-text">{doc.title}</p>
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <p className="min-w-0 flex-1 truncate text-sm font-medium text-filr-text">{doc.title}</p>
+          {showWebUploadInfo ? <WebUploadInfoTip /> : null}
+        </div>
         {tagChips}
         {selected ? (
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-filr-accent text-filr-accent-fg">
@@ -167,7 +173,10 @@ export default function DocumentCard({
         )}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-3">
-        <p className="line-clamp-2 text-sm font-medium leading-snug text-filr-text">{doc.title}</p>
+        <div className="flex items-start gap-1">
+          <p className="line-clamp-2 min-w-0 flex-1 text-sm font-medium leading-snug text-filr-text">{doc.title}</p>
+          {showWebUploadInfo ? <WebUploadInfoTip className="mt-0.5" /> : null}
+        </div>
         {doc.tagIds.length > 0 && <div className="mt-auto">{tagChips}</div>}
       </div>
     </div>
