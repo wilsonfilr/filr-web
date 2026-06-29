@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { Document, UserTag } from '../lib/types'
-import { createSignedUrl } from '../data/filr'
+import { pdfStoragePath } from '../data/filr'
 import { renderPdfFirstPage } from '../lib/pdfThumb'
+import {
+  downloadStorageObjectUrl,
+  revokeStorageObjectUrl,
+  storageObjectExists,
+} from '../lib/storageAssets'
 import { type DragItem, setDragData } from '../lib/dnd'
 import { CheckIcon, DocIcon } from './icons'
 import TagChip from './TagChip'
@@ -42,31 +47,42 @@ export default function DocumentCard({
 
   useEffect(() => {
     let active = true
+    const objectUrls: string[] = []
     setLoading(true)
     setThumbUrl(null)
     ;(async () => {
-      const pageUrl = await createSignedUrl(`${userId}/${doc.id}_p0.jpg`, 3600)
-      if (!active) return
-      if (pageUrl) {
-        setThumbUrl(pageUrl)
-        setLoading(false)
-        return
-      }
-      const pdfUrl = await createSignedUrl(`${userId}/${doc.id}.pdf`, 3600)
-      if (!active) return
-      if (pdfUrl) {
-        const data = await renderPdfFirstPage(doc.id, pdfUrl)
+      const pagePath = `${userId}/${doc.id}_p0.jpg`
+      if (await storageObjectExists(pagePath)) {
+        const pageUrl = await downloadStorageObjectUrl(pagePath)
+        if (pageUrl) objectUrls.push(pageUrl)
         if (!active) return
-        if (data) {
-          setThumbUrl(data)
+        if (pageUrl) {
+          setThumbUrl(pageUrl)
           setLoading(false)
           return
+        }
+      }
+
+      const pdfPath = pdfStoragePath(userId, doc.id)
+      if (await storageObjectExists(pdfPath)) {
+        const pdfObjectUrl = await downloadStorageObjectUrl(pdfPath)
+        if (pdfObjectUrl) objectUrls.push(pdfObjectUrl)
+        if (!active) return
+        if (pdfObjectUrl) {
+          const data = await renderPdfFirstPage(doc.id, pdfObjectUrl)
+          if (!active) return
+          if (data) {
+            setThumbUrl(data)
+            setLoading(false)
+            return
+          }
         }
       }
       setLoading(false)
     })()
     return () => {
       active = false
+      for (const url of objectUrls) revokeStorageObjectUrl(url)
     }
   }, [doc.id, userId])
 

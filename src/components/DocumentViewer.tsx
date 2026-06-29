@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import type { Document, UserTag } from '../lib/types'
 import {
-  createSignedUrl,
   downloadDocumentPdfById,
   listDocumentAssets,
   pdfStoragePath,
   renameDocument,
   softDeleteDocument,
 } from '../data/filr'
+import {
+  downloadStorageObjectUrl,
+  revokeStorageObjectUrl,
+  storageObjectExists,
+} from '../lib/storageAssets'
 import { CloseIcon, DownloadIcon, TrashIcon } from './icons'
 import TagChip from './TagChip'
 
@@ -32,17 +36,29 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
 
   useEffect(() => {
     let active = true
+    const objectUrls: string[] = []
     setLoading(true)
     ;(async () => {
       const { pdfPath, pagePaths } = await listDocumentAssets(userId, doc.id)
-      const [pdf, ...pages] = await Promise.all([
-        createSignedUrl(pdfPath ?? pdfStoragePath(userId, doc.id)),
-        ...pagePaths.map((p) => createSignedUrl(p)),
-      ])
+      const pages: string[] = []
+      for (const path of pagePaths) {
+        const url = await downloadStorageObjectUrl(path)
+        if (!url) continue
+        objectUrls.push(url)
+        pages.push(url)
+      }
+
+      let pdf: string | null = null
+      const path = pdfPath ?? pdfStoragePath(userId, doc.id)
+      if (await storageObjectExists(path)) {
+        pdf = await downloadStorageObjectUrl(path)
+        if (pdf) objectUrls.push(pdf)
+      }
+
       if (!active) return
       setHasPdf(Boolean(pdf))
       setPdfUrl(pdf)
-      setPageUrls(pages.filter((u): u is string => Boolean(u)))
+      setPageUrls(pages)
       setLoading(false)
     })().catch((err) => {
       console.warn('[DocumentViewer] failed to load assets', err)
@@ -54,6 +70,7 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
     })
     return () => {
       active = false
+      for (const url of objectUrls) revokeStorageObjectUrl(url)
     }
   }, [doc.id, userId])
 
@@ -113,7 +130,6 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
         className="mx-auto flex h-full w-full max-w-5xl flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <header className="flex items-center gap-3 border-b border-filr-border bg-filr-surface px-4 py-3">
           <input
             value={title}
@@ -156,7 +172,6 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
           </button>
         </header>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto bg-filr-bg/40 p-4 sm:p-8">
           {loading ? (
             <div className="flex h-full items-center justify-center text-sm text-filr-muted">
@@ -191,7 +206,6 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
           )}
         </div>
 
-        {/* Footer tags */}
         {doc.tagIds.length > 0 && (
           <footer className="flex flex-wrap gap-1.5 border-t border-filr-border bg-filr-surface px-4 py-3">
             {doc.tagIds.map((id) => {

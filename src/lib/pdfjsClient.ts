@@ -1,5 +1,5 @@
 /**
- * Shared pdf.js loader — one worker URL for thumbnails and text extraction.
+ * Shared pdf.js loader for thumbnail rendering only.
  */
 
 type PdfJs = typeof import('pdfjs-dist')
@@ -10,10 +10,8 @@ export async function getPdfjs(): Promise<PdfJs> {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
       const pdfjs = await import('pdfjs-dist')
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url,
-      ).toString()
+      const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+      pdfjs.GlobalWorkerOptions.workerSrc = worker.default
       return pdfjs
     })()
   }

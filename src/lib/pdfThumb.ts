@@ -1,7 +1,5 @@
 /**
- * Render the first page of a PDF to a JPEG data URL, used as a thumbnail when a
- * document has no scanned page image (e.g. PDFs uploaded from the web).
- * pdf.js is loaded lazily so it stays out of the initial bundle.
+ * Render the first page of a PDF to a JPEG data URL for card thumbnails.
  */
 
 import { getPdfjs } from './pdfjsClient'
@@ -23,7 +21,22 @@ export async function renderPdfFirstPage(
     try {
       const pdfjs = await getPdfjs()
       const pdf = await pdfjs.getDocument({ url }).promise
-      return await renderPdfPageToDataUrl(pdf, 1, maxWidth, cacheKey)
+      const page = await pdf.getPage(1)
+      const base = page.getViewport({ scale: 1 })
+      const scale = Math.min(2, maxWidth / base.width)
+      const viewport = page.getViewport({ scale })
+
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.ceil(viewport.width)
+      canvas.height = Math.ceil(viewport.height)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+
+      await page.render({ canvas, canvasContext: ctx, viewport }).promise
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+      cache.set(cacheKey, dataUrl)
+      void pdf.destroy()
+      return dataUrl
     } catch (err) {
       console.warn('[pdfThumb] renderPdfFirstPage failed', { cacheKey, err })
       return null
@@ -34,50 +47,4 @@ export async function renderPdfFirstPage(
 
   inFlight.set(cacheKey, task)
   return task
-}
-
-/** Render page 1 from raw PDF bytes (used during upload before storage is available). */
-export async function renderPdfFirstPageFromBytes(
-  data: ArrayBuffer,
-  maxWidth = 480,
-): Promise<string | null> {
-  const pdfData = data.slice(0)
-  try {
-    const pdfjs = await getPdfjs()
-    const pdf = await pdfjs.getDocument({ data: pdfData }).promise
-    return await renderPdfPageToDataUrl(pdf, 1, maxWidth)
-  } catch (err) {
-    console.warn('[pdfThumb] renderPdfFirstPageFromBytes failed', err)
-    return null
-  }
-}
-
-async function renderPdfPageToDataUrl(
-  pdf: Awaited<ReturnType<Awaited<ReturnType<typeof getPdfjs>>['getDocument']>['promise']>,
-  pageNum: number,
-  maxWidth: number,
-  cacheKey?: string,
-): Promise<string | null> {
-  try {
-    const page = await pdf.getPage(pageNum)
-    const base = page.getViewport({ scale: 1 })
-    const scale = Math.min(2, maxWidth / base.width)
-    const viewport = page.getViewport({ scale })
-
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.ceil(viewport.width)
-    canvas.height = Math.ceil(viewport.height)
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
-    if (cacheKey) cache.set(cacheKey, dataUrl)
-    void pdf.destroy()
-    return dataUrl
-  } catch (err) {
-    console.warn('[pdfThumb] renderPdfPageToDataUrl failed', err)
-    void pdf.destroy()
-    return null
-  }
 }

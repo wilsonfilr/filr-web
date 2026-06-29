@@ -1,4 +1,5 @@
 import { supabase, DOCUMENTS_BUCKET } from '../lib/supabase'
+import { storageObjectExists } from '../lib/storageAssets'
 import { StorageLimitError, wouldExceedStorageLimit } from '../lib/storageLimits'
 import { resolveUniqueName } from '../lib/resolveUniqueName'
 import {
@@ -19,17 +20,6 @@ export function pdfStoragePath(userId: string, documentId: string): string {
 
 function pageImageStoragePath(userId: string, documentId: string, pageIndex: number): string {
   return `${userId}/${documentId}_p${pageIndex}.jpg`
-}
-
-function dataUrlToJpegBlob(dataUrl: string): Blob | null {
-  const match = /^data:image\/jpeg;base64,(.+)$/.exec(dataUrl)
-  if (!match) return null
-  const binary = atob(match[1])
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return new Blob([bytes], { type: 'image/jpeg' })
 }
 
 function normalizeTagIds(raw: unknown): string[] {
@@ -110,41 +100,19 @@ export async function fetchTags(userId: string): Promise<UserTag[]> {
     .map((row) => ({ id: row.id, label: row.label, color: row.color ?? 'neutral' }))
 }
 
-/** List the storage object names for a single document (pdf + scanned page images). */
+/** List storage paths for a document (pdf + page images) using exists checks. */
 export async function listDocumentAssets(
   userId: string,
   documentId: string,
 ): Promise<{ pdfPath: string | null; pagePaths: string[] }> {
-  const knownPdfPath = pdfStoragePath(userId, documentId)
-  const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).list(userId, {
-    limit: 100,
-    search: documentId,
-  })
-  if (error || !data) {
-    console.warn('[filr] listDocumentAssets failed', { userId, documentId, error })
-    return { pdfPath: knownPdfPath, pagePaths: [] }
+  const pdfPath = pdfStoragePath(userId, documentId)
+  const pagePaths: string[] = []
+  for (let i = 0; i < 50; i++) {
+    const path = pageImageStoragePath(userId, documentId, i)
+    if (!(await storageObjectExists(path))) break
+    pagePaths.push(path)
   }
-
-  let pdfPath: string | null = null
-  const pages: { index: number; path: string }[] = []
-  const pageRegex = new RegExp(`^${documentId}_p(\\d+)\\.jpg$`)
-
-  for (const obj of data) {
-    if (obj.name === `${documentId}.pdf`) {
-      pdfPath = `${userId}/${obj.name}`
-      continue
-    }
-    const match = obj.name.match(pageRegex)
-    if (match) {
-      pages.push({ index: Number(match[1]), path: `${userId}/${obj.name}` })
-    }
-  }
-
-  pages.sort((a, b) => a.index - b.index)
-  return {
-    pdfPath: pdfPath ?? knownPdfPath,
-    pagePaths: pages.map((p) => p.path),
-  }
+  return { pdfPath, pagePaths }
 }
 
 async function sumStorageInPrefix(prefix: string): Promise<number> {
@@ -183,21 +151,15 @@ function sanitizeDownloadFilename(title: string): string {
   return safe.toLowerCase().endsWith('.pdf') ? safe : `${safe}.pdf`
 }
 
-/** Download a PDF via a short-lived signed URL fetched as a blob — never navigates to Supabase. */
+/** Download a PDF via authenticated storage download — never uses signed URLs. */
 export async function downloadDocumentPdf(
   storagePath: string,
   title: string,
-  expiresInSeconds = 60,
 ): Promise<void> {
-  const signedUrl = await createSignedUrl(storagePath, expiresInSeconds)
-  if (!signedUrl) throw new Error('Could not prepare download.')
+  const { downloadStorageObject } = await import('../lib/storageAssets')
+  const blob = await downloadStorageObject(storagePath)
+  if (!blob) throw new Error('Could not download file.')
 
-  const response = await fetch(signedUrl)
-  if (!response.ok) {
-    throw new Error(`Download failed (${response.status}).`)
-  }
-
-  const blob = await response.blob()
   const objectUrl = URL.createObjectURL(blob)
   try {
     const link = document.createElement('a')
@@ -889,6 +851,39 @@ export async function moveDocument(
   if (error) throw error
 }
 
+function schedulePdfOcrUpdate(
+  userId: string,
+  documentId: string,
+  file: File,
+  storagePath: string,
+): void {
+  void (async () => {
+    try {
+      const { extractPdfTextViaOcrSpace, extractPdfTextViaOcrSpaceUrl } = await import('../lib/pdfOcr')
+      let text = await extractPdfTextViaOcrSpace(file)
+      if (!text) {
+        const signedUrl = await createSignedUrl(storagePath, 600)
+        if (signedUrl) {
+          text = await extractPdfTextViaOcrSpaceUrl(signedUrl)
+        }
+      }
+      if (!text) return
+      const { error } = await supabase
+        .from('documents')
+        .update({ ocr_text: text })
+        .eq('user_id', userId)
+        .eq('id', documentId)
+      if (error) {
+        console.warn('[filr] background OCR update failed', { documentId, error: error.message })
+      } else {
+        console.log('[filr] background OCR update saved', { documentId, chars: text.length })
+      }
+    } catch (err) {
+      console.warn('[filr] background OCR failed', err)
+    }
+  })()
+}
+
 /** Upload a PDF picked on the computer: store the file then create the document row. */
 export async function uploadPdfDocument(
   userId: string,
@@ -908,19 +903,6 @@ export async function uploadPdfDocument(
     }
   }
 
-  options?.onStatus?.('Reading document...')
-  const fileBuffer = await file.arrayBuffer()
-  const { extractPdfTextFromBytes } = await import('../lib/pdfText')
-  const { renderPdfFirstPageFromBytes } = await import('../lib/pdfThumb')
-  const extractedText = await extractPdfTextFromBytes(fileBuffer)
-  console.log('[filr] uploadPdfDocument ocr_text before insert', {
-    documentId: id,
-    chars: extractedText.length,
-    preview: extractedText.slice(0, 120),
-  })
-
-  const thumbDataUrl = await renderPdfFirstPageFromBytes(fileBuffer)
-
   options?.onStatus?.('Uploading...')
   const storagePath = pdfStoragePath(userId, id)
   const { data: uploadData, error: uploadError } = await supabase.storage
@@ -938,39 +920,23 @@ export async function uploadPdfDocument(
   })
   if (uploadError) throw uploadError
 
-  if (thumbDataUrl) {
-    const thumbBlob = dataUrlToJpegBlob(thumbDataUrl)
-    if (thumbBlob) {
-      const thumbPath = pageImageStoragePath(userId, id, 0)
-      const { error: thumbError } = await supabase.storage
-        .from(DOCUMENTS_BUCKET)
-        .upload(thumbPath, thumbBlob, {
-          upsert: true,
-          contentType: 'image/jpeg',
-        })
-      console.log('[filr] uploadPdfDocument thumbnail upload', {
-        documentId: id,
-        thumbPath,
-        thumbError: thumbError?.message ?? null,
-      })
-    }
-  }
-
   const { error: insertError } = await supabase.from('documents').insert({
     id,
     user_id: userId,
     folder_id: folderId,
     title,
-    ocr_text: extractedText,
+    ocr_text: '',
     tag_ids: [],
   })
   if (insertError) throw insertError
+
+  schedulePdfOcrUpdate(userId, id, file, storagePath)
 
   return {
     id,
     title,
     folderId,
-    ocrText: extractedText,
+    ocrText: '',
     tagIds: [],
     createdAt: new Date().toISOString(),
   }
