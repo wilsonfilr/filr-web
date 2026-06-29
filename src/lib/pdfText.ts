@@ -8,9 +8,11 @@ const MAX_PDF_TEXT_CHARS = 50_000
 
 /** Read all pages from raw PDF bytes; returns '' on any failure. */
 export async function extractPdfTextFromBytes(data: ArrayBuffer): Promise<string> {
+  // Copy before pdf.js — the worker may transfer/detach the underlying buffer.
+  const pdfData = data.slice(0)
   try {
     const pdfjs = await getPdfjs()
-    const pdf = await pdfjs.getDocument({ data }).promise
+    const pdf = await pdfjs.getDocument({ data: pdfData }).promise
     const parts: string[] = []
     let totalChars = 0
 

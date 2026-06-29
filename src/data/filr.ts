@@ -21,6 +21,17 @@ function pageImageStoragePath(userId: string, documentId: string, pageIndex: num
   return `${userId}/${documentId}_p${pageIndex}.jpg`
 }
 
+function dataUrlToJpegBlob(dataUrl: string): Blob | null {
+  const match = /^data:image\/jpeg;base64,(.+)$/.exec(dataUrl)
+  if (!match) return null
+  const binary = atob(match[1])
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: 'image/jpeg' })
+}
+
 function normalizeTagIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return raw.filter((id): id is string => typeof id === 'string' && id.length > 0)
@@ -159,7 +170,10 @@ export async function createSignedUrl(path: string, expiresInSeconds = 3600): Pr
   const { data, error } = await supabase.storage
     .from(DOCUMENTS_BUCKET)
     .createSignedUrl(path, expiresInSeconds)
-  if (error || !data?.signedUrl) return null
+  if (error || !data?.signedUrl) {
+    console.warn('[filr] createSignedUrl failed', { path, error: error?.message })
+    return null
+  }
   return data.signedUrl
 }
 
@@ -895,23 +909,52 @@ export async function uploadPdfDocument(
   }
 
   options?.onStatus?.('Reading document...')
-  const fileBytes = await file.arrayBuffer()
+  const fileBuffer = await file.arrayBuffer()
   const { extractPdfTextFromBytes } = await import('../lib/pdfText')
-  const extractedText = await extractPdfTextFromBytes(fileBytes)
+  const { renderPdfFirstPageFromBytes } = await import('../lib/pdfThumb')
+  const extractedText = await extractPdfTextFromBytes(fileBuffer)
   console.log('[filr] uploadPdfDocument ocr_text before insert', {
     documentId: id,
     chars: extractedText.length,
     preview: extractedText.slice(0, 120),
   })
 
+  const thumbDataUrl = await renderPdfFirstPageFromBytes(fileBuffer)
+
   options?.onStatus?.('Uploading...')
-  const { error: uploadError } = await supabase.storage
+  const storagePath = pdfStoragePath(userId, id)
+  const { data: uploadData, error: uploadError } = await supabase.storage
     .from(DOCUMENTS_BUCKET)
-    .upload(pdfStoragePath(userId, id), fileBytes, {
+    .upload(storagePath, file, {
       upsert: true,
       contentType: 'application/pdf',
     })
+  console.log('[filr] uploadPdfDocument storage upload', {
+    documentId: id,
+    storagePath,
+    fileSize: file.size,
+    uploadError: uploadError?.message ?? null,
+    uploadData,
+  })
   if (uploadError) throw uploadError
+
+  if (thumbDataUrl) {
+    const thumbBlob = dataUrlToJpegBlob(thumbDataUrl)
+    if (thumbBlob) {
+      const thumbPath = pageImageStoragePath(userId, id, 0)
+      const { error: thumbError } = await supabase.storage
+        .from(DOCUMENTS_BUCKET)
+        .upload(thumbPath, thumbBlob, {
+          upsert: true,
+          contentType: 'image/jpeg',
+        })
+      console.log('[filr] uploadPdfDocument thumbnail upload', {
+        documentId: id,
+        thumbPath,
+        thumbError: thumbError?.message ?? null,
+      })
+    }
+  }
 
   const { error: insertError } = await supabase.from('documents').insert({
     id,
