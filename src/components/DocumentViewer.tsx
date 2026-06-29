@@ -4,6 +4,7 @@ import {
   createSignedUrl,
   downloadDocumentPdfById,
   listDocumentAssets,
+  pdfStoragePath,
   renameDocument,
   softDeleteDocument,
 } from '../data/filr'
@@ -35,15 +36,22 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
     ;(async () => {
       const { pdfPath, pagePaths } = await listDocumentAssets(userId, doc.id)
       const [pdf, ...pages] = await Promise.all([
-        pdfPath ? createSignedUrl(pdfPath) : Promise.resolve(null),
+        createSignedUrl(pdfPath ?? pdfStoragePath(userId, doc.id)),
         ...pagePaths.map((p) => createSignedUrl(p)),
       ])
       if (!active) return
-      setHasPdf(Boolean(pdfPath))
+      setHasPdf(Boolean(pdf))
       setPdfUrl(pdf)
       setPageUrls(pages.filter((u): u is string => Boolean(u)))
       setLoading(false)
-    })()
+    })().catch((err) => {
+      console.warn('[DocumentViewer] failed to load assets', err)
+      if (!active) return
+      setHasPdf(false)
+      setPdfUrl(null)
+      setPageUrls([])
+      setLoading(false)
+    })
     return () => {
       active = false
     }

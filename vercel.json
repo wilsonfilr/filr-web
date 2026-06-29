@@ -11,6 +11,15 @@
           "value": "application/json"
         }
       ]
+    },
+    {
+      "source": "/assets/(.*\\.mjs)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/javascript"
+        }
+      ]
     }
   ]
 }

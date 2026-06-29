@@ -1,5 +1,4 @@
 import { supabase, DOCUMENTS_BUCKET } from '../lib/supabase'
-import { extractPdfTextFromFile } from '../lib/pdfText'
 import { StorageLimitError, wouldExceedStorageLimit } from '../lib/storageLimits'
 import { resolveUniqueName } from '../lib/resolveUniqueName'
 import {
@@ -14,7 +13,7 @@ import type { DragItem } from '../lib/dnd'
 import type { Document, Folder, UserTag, VaultEntry, VaultExtraCard } from '../lib/types'
 
 /** Storage paths must match the mobile app (see services/cloudSync.ts + documentCloudAssetsSync.ts). */
-function pdfStoragePath(userId: string, documentId: string): string {
+export function pdfStoragePath(userId: string, documentId: string): string {
   return `${userId}/${documentId}.pdf`
 }
 
@@ -105,10 +104,15 @@ export async function listDocumentAssets(
   userId: string,
   documentId: string,
 ): Promise<{ pdfPath: string | null; pagePaths: string[] }> {
+  const knownPdfPath = pdfStoragePath(userId, documentId)
   const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).list(userId, {
-    limit: 1000,
+    limit: 100,
+    search: documentId,
   })
-  if (error || !data) return { pdfPath: null, pagePaths: [] }
+  if (error || !data) {
+    console.warn('[filr] listDocumentAssets failed', { userId, documentId, error })
+    return { pdfPath: knownPdfPath, pagePaths: [] }
+  }
 
   let pdfPath: string | null = null
   const pages: { index: number; path: string }[] = []
@@ -126,7 +130,10 @@ export async function listDocumentAssets(
   }
 
   pages.sort((a, b) => a.index - b.index)
-  return { pdfPath, pagePaths: pages.map((p) => p.path) }
+  return {
+    pdfPath: pdfPath ?? knownPdfPath,
+    pagePaths: pages.map((p) => p.path),
+  }
 }
 
 async function sumStorageInPrefix(prefix: string): Promise<number> {
@@ -888,12 +895,19 @@ export async function uploadPdfDocument(
   }
 
   options?.onStatus?.('Reading document...')
-  const extractedText = await extractPdfTextFromFile(file)
+  const fileBytes = await file.arrayBuffer()
+  const { extractPdfTextFromBytes } = await import('../lib/pdfText')
+  const extractedText = await extractPdfTextFromBytes(fileBytes)
+  console.log('[filr] uploadPdfDocument ocr_text before insert', {
+    documentId: id,
+    chars: extractedText.length,
+    preview: extractedText.slice(0, 120),
+  })
 
   options?.onStatus?.('Uploading...')
   const { error: uploadError } = await supabase.storage
     .from(DOCUMENTS_BUCKET)
-    .upload(pdfStoragePath(userId, id), file, {
+    .upload(pdfStoragePath(userId, id), fileBytes, {
       upsert: true,
       contentType: 'application/pdf',
     })

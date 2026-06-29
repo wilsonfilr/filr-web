@@ -4,21 +4,7 @@
  * pdf.js is loaded lazily so it stays out of the initial bundle.
  */
 
-type PdfJs = typeof import('pdfjs-dist')
-
-let pdfjsPromise: Promise<PdfJs> | null = null
-
-async function getPdfjs(): Promise<PdfJs> {
-  if (!pdfjsPromise) {
-    pdfjsPromise = (async () => {
-      const pdfjs = await import('pdfjs-dist')
-      const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
-      pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-      return pdfjs
-    })()
-  }
-  return pdfjsPromise
-}
+import { getPdfjs } from './pdfjsClient'
 
 const cache = new Map<string, string>()
 const inFlight = new Map<string, Promise<string | null>>()

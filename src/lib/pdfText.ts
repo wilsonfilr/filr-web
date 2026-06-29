@@ -1,30 +1,15 @@
 /**
- * Extract plain text from a PDF File using pdf.js (same worker setup as pdfThumb.ts).
+ * Extract plain text from a PDF using pdf.js.
  */
 
-type PdfJs = typeof import('pdfjs-dist')
+import { getPdfjs } from './pdfjsClient'
 
 const MAX_PDF_TEXT_CHARS = 50_000
 
-let pdfjsPromise: Promise<PdfJs> | null = null
-
-async function getPdfjs(): Promise<PdfJs> {
-  if (!pdfjsPromise) {
-    pdfjsPromise = (async () => {
-      const pdfjs = await import('pdfjs-dist')
-      const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
-      pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-      return pdfjs
-    })()
-  }
-  return pdfjsPromise
-}
-
-/** Read all pages from a PDF file; returns '' on any failure. */
-export async function extractPdfTextFromFile(file: File): Promise<string> {
+/** Read all pages from raw PDF bytes; returns '' on any failure. */
+export async function extractPdfTextFromBytes(data: ArrayBuffer): Promise<string> {
   try {
     const pdfjs = await getPdfjs()
-    const data = await file.arrayBuffer()
     const pdf = await pdfjs.getDocument({ data }).promise
     const parts: string[] = []
     let totalChars = 0
@@ -46,9 +31,29 @@ export async function extractPdfTextFromFile(file: File): Promise<string> {
       }
     }
 
+    const numPages = pdf.numPages
     void pdf.destroy()
-    return parts.join('\n').slice(0, MAX_PDF_TEXT_CHARS)
-  } catch {
+    const text = parts.join('\n').slice(0, MAX_PDF_TEXT_CHARS)
+    console.log('[pdfText] extractPdfTextFromBytes', {
+      pages: numPages,
+      chars: text.length,
+      preview: text.slice(0, 120),
+    })
+    return text
+  } catch (err) {
+    console.warn('[pdfText] extractPdfTextFromBytes failed', err)
+    return ''
+  }
+}
+
+/** Read all pages from a PDF File; returns '' on any failure. */
+export async function extractPdfTextFromFile(file: File): Promise<string> {
+  console.log('[pdfText] extractPdfTextFromFile called', { name: file.name, size: file.size })
+  try {
+    const data = await file.arrayBuffer()
+    return await extractPdfTextFromBytes(data)
+  } catch (err) {
+    console.warn('[pdfText] extractPdfTextFromFile failed', err)
     return ''
   }
 }
