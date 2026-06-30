@@ -113,6 +113,8 @@ export default function DocumentCard({
     </div>
   )
 
+  const thumbBackdropClass = thumbUrl || loading ? 'bg-filr-bg/60' : ''
+
   if (view === 'list') {
     return (
       <div
@@ -121,7 +123,7 @@ export default function DocumentCard({
           selected ? 'border-filr-accent ring-2 ring-filr-accent/60' : 'border-filr-border hover:border-filr-accent/60'
         }`}
       >
-        <div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded bg-filr-bg/60">
+        <div className={`flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded ${thumbBackdropClass}`}>
           {thumbUrl ? (
             <img src={thumbUrl} alt="" draggable={false} onError={() => setThumbUrl(null)} className="h-full w-full object-cover" />
           ) : loading ? (
@@ -151,7 +153,7 @@ export default function DocumentCard({
         selected ? 'border-filr-accent ring-2 ring-filr-accent/60' : 'border-filr-border hover:border-filr-accent/60'
       }`}
     >
-      <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-filr-bg/60">
+      <div className={`relative flex aspect-[3/4] items-center justify-center overflow-hidden ${thumbBackdropClass}`}>
         {selected && (
           <span className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-filr-accent text-filr-accent-fg">
             <CheckIcon className="h-3 w-3" />
