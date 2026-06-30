@@ -6,11 +6,9 @@ import {
   pdfStoragePath,
   renameDocument,
   softDeleteDocument,
+  textStoragePath,
 } from '../data/filr'
-import {
-  downloadStorageObjectUrl,
-  revokeStorageObjectUrl,
-} from '../lib/storageAssets'
+import { downloadStorageObject, downloadStorageObjectUrl, revokeStorageObjectUrl } from '../lib/storageAssets'
 import { CloseIcon, DownloadIcon, TrashIcon } from './icons'
 import TagChip from './TagChip'
 
@@ -25,6 +23,7 @@ type Props = {
 export default function DocumentViewer({ doc, userId, tagsById, onClose, onChanged }: Props) {
   const [pageUrls, setPageUrls] = useState<string[]>([])
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [textBody, setTextBody] = useState<string | null>(null)
   const [hasPdf, setHasPdf] = useState(false)
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState(doc.title)
@@ -38,7 +37,7 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
     const objectUrls: string[] = []
     setLoading(true)
     ;(async () => {
-      const { pdfPath, pagePaths } = await listDocumentAssets(userId, doc.id)
+      const { pdfPath, textPath, pagePaths } = await listDocumentAssets(userId, doc.id)
       const pages: string[] = []
       for (const path of pagePaths) {
         const url = await downloadStorageObjectUrl(path)
@@ -52,10 +51,21 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
       pdf = await downloadStorageObjectUrl(path, { silent: true })
       if (pdf) objectUrls.push(pdf)
 
+      let text = ''
+      const txtBlob = await downloadStorageObject(textPath ?? textStoragePath(userId, doc.id), {
+        silent: true,
+      })
+      if (txtBlob) {
+        text = (await txtBlob.text()).slice(0, 50_000)
+      } else if (doc.ocrText.trim().length > 0) {
+        text = doc.ocrText
+      }
+
       if (!active) return
       setHasPdf(Boolean(pdf))
       setPdfUrl(pdf)
       setPageUrls(pages)
+      setTextBody(text.length > 0 ? text : null)
       setLoading(false)
     })().catch((err) => {
       console.warn('[DocumentViewer] failed to load assets', err)
@@ -63,6 +73,7 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
       setHasPdf(false)
       setPdfUrl(null)
       setPageUrls([])
+      setTextBody(doc.ocrText.trim().length > 0 ? doc.ocrText : null)
       setLoading(false)
     })
     return () => {
@@ -191,6 +202,10 @@ export default function DocumentViewer({ doc, userId, tagsById, onClose, onChang
               src={pdfUrl}
               className="mx-auto h-full w-full max-w-3xl rounded-lg border border-filr-border bg-white"
             />
+          ) : textBody ? (
+            <pre className="mx-auto max-h-full w-full max-w-3xl overflow-auto whitespace-pre-wrap rounded-lg border border-filr-border bg-filr-surface p-4 text-sm leading-relaxed text-filr-text">
+              {textBody}
+            </pre>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-filr-muted">
               <p>No file is available for this document yet.</p>

@@ -40,6 +40,7 @@ import {
   setFolderTags,
   upsertTags,
   uploadPdfDocument,
+  uploadTextDocument,
   uploadImageDocument,
 } from './data/filr'
 import { deleteAccount } from './lib/authService'
@@ -54,7 +55,7 @@ import TagsModal from './components/TagsModal'
 import FileDropOverlay from './components/FileDropOverlay'
 import SettingsModal, { type SettingsSection, type SettingsSubsheet } from './components/SettingsModal'
 import { useExternalFileDrop } from './hooks/useExternalFileDrop'
-import { isPdfFile, isUploadableFile, UPLOAD_FILE_ACCEPT } from './lib/uploadFiles'
+import { isPdfFile, isTxtFile, isUploadableFile, UPLOAD_FILE_ACCEPT } from './lib/uploadFiles'
 import MoveDialog from './components/MoveDialog'
 import AddTagDialog from './components/AddTagDialog'
 import RenameDialog from './components/RenameDialog'
@@ -832,8 +833,8 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
           setToast({
             message:
               rejectedCount === 1
-                ? 'Only PDF and JPG files can be uploaded.'
-                : `${rejectedCount} files skipped — only PDF and JPG files are supported.`,
+                ? 'Only PDF, JPG, and TXT files can be uploaded.'
+                : `${rejectedCount} files skipped — only PDF, JPG, and TXT files are supported.`,
           })
         }
         return
@@ -851,6 +852,9 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
               onStatus: (message) => setToast({ message, loading: true }),
             })
             uploadedPdfIds.push(created.id)
+          } else if (isTxtFile(file)) {
+            setToast({ message: 'Uploading...', loading: true })
+            await uploadTextDocument(userId, file, selectedFolderId, { storageLimitBytes })
           } else {
             setToast({ message: 'Uploading...', loading: true })
             await uploadImageDocument(userId, file, selectedFolderId, { storageLimitBytes })
@@ -1679,7 +1683,7 @@ function EmptyState({ isSearching, tagFiltered }: { isSearching: boolean; tagFil
           ? 'Try a different title or some words from the document.'
           : tagFiltered
             ? 'Try selecting different tags, or clear the tag filter.'
-            : 'Scan documents in the Filr app, or upload PDFs and JPGs from this computer — they’ll appear here.'}
+            : 'Scan documents in the Filr app, or upload PDFs, JPGs, and TXT files from this computer — they’ll appear here.'}
       </p>
     </div>
   )

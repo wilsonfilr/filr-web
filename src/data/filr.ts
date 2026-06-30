@@ -18,6 +18,10 @@ export function pdfStoragePath(userId: string, documentId: string): string {
   return `${userId}/${documentId}.pdf`
 }
 
+export function textStoragePath(userId: string, documentId: string): string {
+  return `${userId}/${documentId}.txt`
+}
+
 function pageImageStoragePath(userId: string, documentId: string, pageIndex: number): string {
   return `${userId}/${documentId}_p${pageIndex}.jpg`
 }
@@ -100,12 +104,13 @@ export async function fetchTags(userId: string): Promise<UserTag[]> {
     .map((row) => ({ id: row.id, label: row.label, color: row.color ?? 'neutral' }))
 }
 
-/** List storage paths for a document (pdf + page images) via silent download probes. */
+/** List storage paths for a document (pdf, txt, page images). */
 export async function listDocumentAssets(
   userId: string,
   documentId: string,
-): Promise<{ pdfPath: string | null; pagePaths: string[] }> {
+): Promise<{ pdfPath: string | null; textPath: string | null; pagePaths: string[] }> {
   const pdfPath = pdfStoragePath(userId, documentId)
+  const textPath = textStoragePath(userId, documentId)
   const pagePaths: string[] = []
   for (let i = 0; i < 50; i++) {
     const path = pageImageStoragePath(userId, documentId, i)
@@ -113,7 +118,7 @@ export async function listDocumentAssets(
     if (!blob) break
     pagePaths.push(path)
   }
-  return { pdfPath, pagePaths }
+  return { pdfPath, textPath, pagePaths }
 }
 
 async function sumStorageInPrefix(prefix: string): Promise<number> {
@@ -295,8 +300,8 @@ async function removeFolderRows(userId: string, folderIds: string[]): Promise<vo
 
 export async function purgeDocumentAssets(userId: string, documentIds: string[]): Promise<void> {
   for (const documentId of documentIds) {
-    const { pdfPath, pagePaths } = await listDocumentAssets(userId, documentId)
-    const paths = [pdfPath, ...pagePaths].filter((p): p is string => Boolean(p))
+    const { pdfPath, textPath, pagePaths } = await listDocumentAssets(userId, documentId)
+    const paths = [pdfPath, textPath, ...pagePaths].filter((p): p is string => Boolean(p))
     if (paths.length > 0) {
       await supabase.storage.from(DOCUMENTS_BUCKET).remove(paths)
     }
@@ -497,6 +502,7 @@ export async function permanentlyDeleteRecentlyDeleted(
 
 function documentStorageBytesFromListing(documentId: string, listing: Map<string, number>): number {
   let total = listing.get(`${documentId}.pdf`) ?? 0
+  total += listing.get(`${documentId}.txt`) ?? 0
   const pagePrefix = `${documentId}_p`
   for (const [name, size] of listing) {
     if (name.startsWith(pagePrefix) && name.endsWith('.jpg')) {
@@ -574,9 +580,12 @@ export async function copyDocumentToFolder(
   const siblings = await siblingDocumentTitles(userId, targetFolderId)
   const title = resolveUniqueName(document.title, siblings)
 
-  const { pdfPath, pagePaths } = await listDocumentAssets(userId, document.id)
-  if (pdfPath) {
+  const { pdfPath, textPath, pagePaths } = await listDocumentAssets(userId, document.id)
+  if (pdfPath && (await downloadStorageObject(pdfPath, { silent: true }))) {
     await copyStorageObject(pdfPath, pdfStoragePath(userId, newId))
+  }
+  if (textPath && (await downloadStorageObject(textPath, { silent: true }))) {
+    await copyStorageObject(textPath, textStoragePath(userId, newId))
   }
   for (const pagePath of pagePaths) {
     const fileName = pagePath.split('/').pop() ?? ''
@@ -909,6 +918,57 @@ export async function uploadPdfDocument(
     title,
     folderId,
     ocrText: '',
+    tagIds: [],
+    createdAt: new Date().toISOString(),
+  }
+}
+
+/** Upload a plain-text file: store in Supabase and save contents to ocr_text for search. */
+export async function uploadTextDocument(
+  userId: string,
+  file: File,
+  folderId: string | null,
+  options?: { storageLimitBytes?: number; onStatus?: (message: string) => void },
+): Promise<Document> {
+  const id = crypto.randomUUID()
+  const baseTitle = file.name.replace(/\.txt$/i, '').trim() || 'Untitled'
+  const siblings = await siblingDocumentTitles(userId, folderId)
+  const title = resolveUniqueName(baseTitle, siblings)
+
+  if (options?.storageLimitBytes != null) {
+    const used = await getStorageUsage(userId)
+    if (wouldExceedStorageLimit(used, options.storageLimitBytes, file.size)) {
+      throw new StorageLimitError(used, options.storageLimitBytes)
+    }
+  }
+
+  const { readTextFileContent } = await import('../lib/uploadFiles')
+  options?.onStatus?.('Uploading...')
+  const textContent = await readTextFileContent(file)
+  const storagePath = textStoragePath(userId, id)
+  const { error: uploadError } = await supabase.storage
+    .from(DOCUMENTS_BUCKET)
+    .upload(storagePath, file, {
+      upsert: true,
+      contentType: 'text/plain',
+    })
+  if (uploadError) throw uploadError
+
+  const { error: insertError } = await supabase.from('documents').insert({
+    id,
+    user_id: userId,
+    folder_id: folderId,
+    title,
+    ocr_text: textContent,
+    tag_ids: [],
+  })
+  if (insertError) throw insertError
+
+  return {
+    id,
+    title,
+    folderId,
+    ocrText: textContent,
     tagIds: [],
     createdAt: new Date().toISOString(),
   }

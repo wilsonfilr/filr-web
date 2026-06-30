@@ -44,7 +44,7 @@ export default function FileDropOverlay({ visible, folderName, uploading }: Prop
           )}
         </p>
         {!uploading ? (
-          <p className="mt-3 text-xs text-filr-muted/80">PDF or JPG</p>
+          <p className="mt-3 text-xs text-filr-muted/80">PDF, JPG, or TXT</p>
         ) : null}
       </div>
     </div>
