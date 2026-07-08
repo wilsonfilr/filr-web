@@ -6,46 +6,87 @@ import {
   revokeFolderShareLink,
   type FolderShareLinkRow,
 } from '../lib/folderShareLinks'
+import {
+  buildDocumentShareUrl,
+  createOrReuseDocumentShareLink,
+  getActiveDocumentShareLink,
+  revokeDocumentShareLink,
+  type DocumentShareLinkRow,
+} from '../lib/documentShareLinks'
 import { copyTextToClipboard } from '../lib/clipboard'
+import ConfirmDialog from './ConfirmDialog'
 import { CloseIcon, CopyIcon, ExportIcon } from './icons'
 
-type Props = {
+type FolderProps = {
+  kind: 'folder'
   folderId: string
   folderName: string
   userId: string
   onClose: () => void
 }
 
-export default function ShareFolderDialog({ folderId, folderName, userId, onClose }: Props) {
+type DocumentProps = {
+  kind: 'document'
+  documentId: string
+  documentName: string
+  userId: string
+  onClose: () => void
+}
+
+type Props = FolderProps | DocumentProps
+
+export default function ShareFolderDialog(props: Props) {
+  const { userId, onClose } = props
+  const isFolder = props.kind === 'folder'
+  const targetId = isFolder ? props.folderId : props.documentId
+  const targetName = isFolder ? props.folderName : props.documentName
+  const dialogTitle = isFolder ? 'Share folder' : 'Share document'
+
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [link, setLink] = useState<FolderShareLinkRow | null>(null)
+  const [link, setLink] = useState<FolderShareLinkRow | DocumentShareLinkRow | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
+  const [stopConfirmError, setStopConfirmError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const active = await getActiveFolderShareLink(userId, folderId)
+      if (isFolder) {
+        const active = await getActiveFolderShareLink(userId, targetId)
+        if (active) {
+          setLink(active)
+          return
+        }
+        const created = await createOrReuseFolderShareLink(userId, targetId)
+        setLink(created)
+        return
+      }
+      const active = await getActiveDocumentShareLink(userId, targetId)
       if (active) {
         setLink(active)
         return
       }
-      const created = await createOrReuseFolderShareLink(userId, folderId)
+      const created = await createOrReuseDocumentShareLink(userId, targetId)
       setLink(created)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create share link.')
     } finally {
       setLoading(false)
     }
-  }, [folderId, userId])
+  }, [isFolder, targetId, userId])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const shareUrl = link ? buildFolderShareUrl(link.token) : null
+  const shareUrl = link
+    ? isFolder
+      ? buildFolderShareUrl(link.token)
+      : buildDocumentShareUrl(link.token)
+    : null
 
   async function handleCopy() {
     if (!shareUrl) return
@@ -58,31 +99,42 @@ export default function ShareFolderDialog({ folderId, folderName, userId, onClos
 
   async function handleStopSharing() {
     setBusy(true)
-    setError(null)
+    setStopConfirmError(null)
     try {
-      await revokeFolderShareLink(userId, folderId)
+      if (isFolder) {
+        await revokeFolderShareLink(userId, targetId)
+      } else {
+        await revokeDocumentShareLink(userId, targetId)
+      }
       setLink(null)
+      setStopConfirmOpen(false)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not stop sharing.')
+      setStopConfirmError(err instanceof Error ? err.message : 'Could not stop sharing.')
     } finally {
       setBusy(false)
     }
   }
 
+  const stopConfirmTitle = `Stop sharing "${targetName}"?`
+  const stopConfirmMessage = isFolder
+    ? 'Anyone with the link will no longer be able to open this folder.'
+    : 'Anyone with the link will no longer be able to open this document.'
+
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div
         className="w-full max-w-md rounded-2xl border border-[#2a3848] bg-[#1D2A36] p-5 shadow-xl"
         role="dialog"
-        aria-labelledby="share-folder-title"
+        aria-labelledby="share-link-title"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 id="share-folder-title" className="text-lg font-semibold text-[#EBF3FE]">
-              Share folder
+            <h2 id="share-link-title" className="text-lg font-semibold text-[#EBF3FE]">
+              {dialogTitle}
             </h2>
-            <p className="mt-1 text-sm text-[#9EA6B5]">{folderName}</p>
+            <p className="mt-1 text-sm text-[#9EA6B5]">{targetName}</p>
           </div>
           <button
             type="button"
@@ -119,7 +171,10 @@ export default function ShareFolderDialog({ folderId, folderName, userId, onClos
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void handleStopSharing()}
+                onClick={() => {
+                  setStopConfirmError(null)
+                  setStopConfirmOpen(true)
+                }}
                 className="inline-flex cursor-pointer items-center rounded-xl border border-[#2a3848] px-4 py-2.5 text-sm font-semibold text-[#EBF3FE] transition hover:border-red-400/60 hover:text-red-300 disabled:opacity-60"
               >
                 Stop Sharing
@@ -129,5 +184,24 @@ export default function ShareFolderDialog({ folderId, folderName, userId, onClos
         ) : null}
       </div>
     </div>
+
+    {stopConfirmOpen ? (
+      <ConfirmDialog
+        title={stopConfirmTitle}
+        message={stopConfirmMessage}
+        confirmLabel="Stop sharing"
+        destructive
+        busy={busy}
+        busyLabel="Stopping…"
+        error={stopConfirmError}
+        onCancel={() => {
+          if (busy) return
+          setStopConfirmOpen(false)
+          setStopConfirmError(null)
+        }}
+        onConfirm={() => void handleStopSharing()}
+      />
+    ) : null}
+    </>
   )
 }

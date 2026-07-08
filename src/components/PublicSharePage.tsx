@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import JSZip from 'jszip'
 import { fetchSharedFolderByToken, type SharedFolderPayload } from '../lib/folderShareLinks'
+import { fetchSharedDocumentByToken, isDocumentShareToken, type SharedDocumentPayload } from '../lib/documentShareLinks'
 import { DownloadIcon, FolderIcon } from './icons'
 
 const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6769156788'
@@ -94,7 +95,9 @@ type Props = {
 }
 
 export default function PublicSharePage({ token }: Props) {
-  const [payload, setPayload] = useState<SharedFolderPayload | null>(null)
+  const isDocumentShare = isDocumentShareToken(token)
+  const [folderPayload, setFolderPayload] = useState<SharedFolderPayload | null>(null)
+  const [documentPayload, setDocumentPayload] = useState<SharedDocumentPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
   const [downloadingAll, setDownloadingAll] = useState(false)
@@ -104,10 +107,17 @@ export default function PublicSharePage({ token }: Props) {
     let active = true
     setLoading(true)
     setUnavailable(false)
-    void fetchSharedFolderByToken(token)
+    setFolderPayload(null)
+    setDocumentPayload(null)
+    const load = isDocumentShare ? fetchSharedDocumentByToken(token) : fetchSharedFolderByToken(token)
+    void load
       .then((data) => {
         if (!active) return
-        setPayload(data)
+        if (isDocumentShare) {
+          setDocumentPayload(data as SharedDocumentPayload)
+        } else {
+          setFolderPayload(data as SharedFolderPayload)
+        }
       })
       .catch(() => {
         if (!active) return
@@ -119,21 +129,21 @@ export default function PublicSharePage({ token }: Props) {
     return () => {
       active = false
     }
-  }, [token])
+  }, [isDocumentShare, token])
 
-  const tree = useMemo(() => (payload ? buildFolderTree(payload) : null), [payload])
+  const tree = useMemo(() => (folderPayload ? buildFolderTree(folderPayload) : null), [folderPayload])
 
   async function handleDownloadAll() {
-    if (!payload || payload.files.length === 0) return
+    if (!folderPayload || folderPayload.files.length === 0) return
     setDownloadingAll(true)
     setDownloadError(null)
     try {
       const zip = new JSZip()
-      const foldersById = new Map(payload.folders.map((f) => [f.id, f]))
+      const foldersById = new Map(folderPayload.folders.map((f) => [f.id, f]))
       const usedPaths = new Set<string>()
 
-      for (const file of payload.files) {
-        const segments = folderPathSegments(file.folderId, foldersById, payload.folderName)
+      for (const file of folderPayload.files) {
+        const segments = folderPathSegments(file.folderId, foldersById, folderPayload.folderName)
         let path = `${segments.join('/')}/${file.name}`
         if (usedPaths.has(path)) {
           const dot = file.name.lastIndexOf('.')
@@ -157,7 +167,7 @@ export default function PublicSharePage({ token }: Props) {
       const url = URL.createObjectURL(zipBlob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `${payload.folderName.replace(/[<>:"/\\|?*]/g, '_') || 'shared-folder'}.zip`
+      link.download = `${folderPayload.folderName.replace(/[<>:"/\\|?*]/g, '_') || 'shared-folder'}.zip`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -169,6 +179,10 @@ export default function PublicSharePage({ token }: Props) {
     }
   }
 
+  const unavailableMessage = isDocumentShare
+    ? 'The owner may have stopped sharing, or the document was removed.'
+    : 'The owner may have stopped sharing, or the folder was removed.'
+
   return (
     <div className="min-h-screen bg-[#0a1117] text-[#EBF3FE]">
       <div className="page-gradient min-h-screen">
@@ -176,24 +190,44 @@ export default function PublicSharePage({ token }: Props) {
           {loading ? (
             <div className="flex min-h-[40vh] flex-col items-center justify-center">
               <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#2a3848] border-t-[#6DAFEF]" />
-              <p className="mt-4 text-sm text-[#9EA6B5]">Loading shared folder…</p>
+              <p className="mt-4 text-sm text-[#9EA6B5]">
+                {isDocumentShare ? 'Loading shared document…' : 'Loading shared folder…'}
+              </p>
             </div>
           ) : unavailable ? (
             <div className="rounded-2xl border border-[#2a3848] bg-[#1D2A36] px-6 py-12 text-center">
               <h1 className="text-xl font-semibold text-[#EBF3FE]">This link is no longer available</h1>
-              <p className="mt-2 text-sm text-[#9EA6B5]">
-                The owner may have stopped sharing, or the folder was removed.
-              </p>
+              <p className="mt-2 text-sm text-[#9EA6B5]">{unavailableMessage}</p>
             </div>
-          ) : payload && tree ? (
+          ) : documentPayload ? (
+            <>
+              <header className="mb-8">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#6DAFEF]">Shared document</p>
+                <h1 className="mt-2 text-3xl font-semibold text-[#EBF3FE]">{documentPayload.name}</h1>
+                <p className="mt-2 text-sm text-[#9EA6B5]">View and download without signing in</p>
+              </header>
+              <section className="rounded-2xl border border-[#2a3848] bg-[#101922]/80 p-5">
+                <a
+                  href={documentPayload.signedUrl}
+                  download={documentPayload.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[#2a3848] bg-[#1D2A36] px-4 py-4 text-sm text-[#EBF3FE] transition hover:border-[#6DAFEF]/60"
+                >
+                  <span className="min-w-0 truncate">{documentPayload.name}</span>
+                  <DownloadIcon className="h-5 w-5 shrink-0 text-[#6DAFEF]" />
+                </a>
+              </section>
+            </>
+          ) : folderPayload && tree ? (
             <>
               <header className="mb-8">
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#6DAFEF]">Shared folder</p>
-                <h1 className="mt-2 text-3xl font-semibold text-[#EBF3FE]">{payload.folderName}</h1>
+                <h1 className="mt-2 text-3xl font-semibold text-[#EBF3FE]">{folderPayload.folderName}</h1>
                 <p className="mt-2 text-sm text-[#9EA6B5]">
-                  {payload.files.length} file{payload.files.length === 1 ? '' : 's'} · view and download without signing in
+                  {folderPayload.files.length} file{folderPayload.files.length === 1 ? '' : 's'} · view and download without signing in
                 </p>
-                {payload.files.length > 0 ? (
+                {folderPayload.files.length > 0 ? (
                   <button
                     type="button"
                     disabled={downloadingAll}
@@ -214,7 +248,7 @@ export default function PublicSharePage({ token }: Props) {
               </header>
 
               <section className="rounded-2xl border border-[#2a3848] bg-[#101922]/80 p-5">
-                {payload.files.length === 0 && tree.children.length === 0 ? (
+                {folderPayload.files.length === 0 && tree.children.length === 0 ? (
                   <p className="py-8 text-center text-sm text-[#9EA6B5]">This folder is empty.</p>
                 ) : (
                   <TreeSection node={tree} />

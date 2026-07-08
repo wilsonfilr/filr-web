@@ -178,7 +178,11 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   const [moveItems, setMoveItems] = useState<DragItem[] | null>(null)
   const [addTagItems, setAddTagItems] = useState<DragItem[] | null>(null)
   const [renameItem, setRenameItem] = useState<DragItem | null>(null)
-  const [shareFolderTarget, setShareFolderTarget] = useState<{ id: string; name: string } | null>(null)
+  const [shareLinkTarget, setShareLinkTarget] = useState<
+    | { kind: 'folder'; id: string; name: string }
+    | { kind: 'document'; id: string; name: string }
+    | null
+  >(null)
   const [fileItItems, setFileItItems] = useState<FileItItem[] | null>(null)
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
   const [downloading, setDownloading] = useState(false)
@@ -1014,13 +1018,23 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
     const hasDoc = items.some((i) => i.type === 'document')
     const single = items.length === 1
     const singleFolder = single && items[0]?.type === 'folder'
+    const singleDocument = single && items[0]?.type === 'document'
     const actions: MenuAction[] = []
     if (singleFolder) {
       actions.push({
         label: 'Share Folder',
         icon: <ExportIcon className="h-4 w-4" />,
         onClick: () => {
-          setShareFolderTarget({ id: items[0]!.id, name: itemName(items[0]!) })
+          setShareLinkTarget({ kind: 'folder', id: items[0]!.id, name: itemName(items[0]!) })
+        },
+      })
+    }
+    if (singleDocument) {
+      actions.push({
+        label: 'Share Link',
+        icon: <ExportIcon className="h-4 w-4" />,
+        onClick: () => {
+          setShareLinkTarget({ kind: 'document', id: items[0]!.id, name: itemName(items[0]!) })
         },
       })
     }
@@ -1598,14 +1612,25 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         />
       )}
 
-      {shareFolderTarget && (
+      {shareLinkTarget?.kind === 'folder' ? (
         <ShareFolderDialog
-          folderId={shareFolderTarget.id}
-          folderName={shareFolderTarget.name}
+          kind="folder"
+          folderId={shareLinkTarget.id}
+          folderName={shareLinkTarget.name}
           userId={userId}
-          onClose={() => setShareFolderTarget(null)}
+          onClose={() => setShareLinkTarget(null)}
         />
-      )}
+      ) : null}
+
+      {shareLinkTarget?.kind === 'document' ? (
+        <ShareFolderDialog
+          kind="document"
+          documentId={shareLinkTarget.id}
+          documentName={shareLinkTarget.name}
+          userId={userId}
+          onClose={() => setShareLinkTarget(null)}
+        />
+      ) : null}
 
       {fileItItems && (
         <FileItDialog
