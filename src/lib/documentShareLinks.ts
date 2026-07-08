@@ -27,6 +27,17 @@ export function buildDocumentShareUrl(token: string): string {
   return `${FOLDER_SHARE_BASE_URL}/${encodeURIComponent(token)}`
 }
 
+export async function listActiveDocumentShareLinks(ownerId: string): Promise<DocumentShareLinkRow[]> {
+  const { data, error } = await supabase
+    .from('document_share_links')
+    .select('id, document_id, owner_id, token, created_at, revoked_at')
+    .eq('owner_id', ownerId)
+    .is('revoked_at', null)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getActiveDocumentShareLink(
   ownerId: string,
   documentId: string,

@@ -28,6 +28,7 @@ import {
 import { FilrLogoMark } from './brandLogos'
 import TagsPanel from './TagsPanel'
 import VaultPanel from './VaultPanel'
+import SharedLinksPanel from './SharedLinksPanel'
 import ConfirmDialog from './ConfirmDialog'
 import RecentlyDeletedPanel, { type RecentlyDeletedToolbarState } from './RecentlyDeletedPanel'
 import PremiumUpgradePanel from './PremiumUpgradePanel'
@@ -47,6 +48,7 @@ export type SettingsSection = 'general' | 'account' | 'support' | 'legal' | 'doc
 export type SettingsSubsheet =
   | 'tags'
   | 'vault'
+  | 'shared-links'
   | 'recently-deleted'
   | 'plan'
   | 'storage-upgrade'
@@ -66,6 +68,7 @@ const SECTIONS: { id: SettingsSection; label: string }[] = [
 const SUBSHEET_META: Record<Exclude<SettingsSubsheet, 'premium-plan-details'>, { title: string; subtitle?: string }> = {
   tags: { title: 'Tags' },
   vault: { title: 'Vault', subtitle: 'Add and edit cards in the Filr app · Read-only here' },
+  'shared-links': { title: 'Shared Links' },
   plan: { title: 'Your Plan' },
   'storage-upgrade': { title: 'Upgrade Your Storage' },
   'premium-upgrade': { title: 'Filr Premium', subtitle: 'Choose your plan' },
@@ -262,6 +265,8 @@ export default function SettingsModal({
             <TagsPanel userId={userId} tags={tags} onChanged={onLibraryChanged} />
           ) : subsheet === 'vault' ? (
             <VaultPanel userId={userId} />
+          ) : subsheet === 'shared-links' ? (
+            <SharedLinksPanel userId={userId} folders={folders} documents={documents} />
           ) : subsheet === 'plan' ? (
             <PlanPanel
               userId={userId}
@@ -297,6 +302,7 @@ export default function SettingsModal({
                   onThemeChange={onThemeChange}
                   onOpenTags={() => setSubsheet('tags')}
                   onOpenVault={() => setSubsheet('vault')}
+                  onOpenSharedLinks={() => setSubsheet('shared-links')}
                 />
               )}
               {active === 'account' && (
@@ -402,11 +408,13 @@ function GeneralSection({
   onThemeChange,
   onOpenTags,
   onOpenVault,
+  onOpenSharedLinks,
 }: {
   theme: Theme
   onThemeChange: (t: Theme) => void
   onOpenTags: () => void
   onOpenVault: () => void
+  onOpenSharedLinks: () => void
 }) {
   return (
     <>
@@ -435,6 +443,7 @@ function GeneralSection({
         <Row label="Tags" onClick={onOpenTags} right={<TagIcon className="h-4 w-4" />} />
         <Row label="Smart Filing" disabled right={<MobileBadge />} />
         <Row label="Vault" onClick={onOpenVault} right={<ToggleOptionIcon className="h-4 w-4" />} />
+        <Row label="Shared Links" onClick={onOpenSharedLinks} right={<ShareIcon className="h-4 w-4" />} />
       </Card>
     </>
   )

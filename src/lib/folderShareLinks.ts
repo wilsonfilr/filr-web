@@ -21,6 +21,17 @@ export function buildFolderShareUrl(token: string): string {
   return `${FOLDER_SHARE_BASE_URL}/${encodeURIComponent(token)}`
 }
 
+export async function listActiveFolderShareLinks(ownerId: string): Promise<FolderShareLinkRow[]> {
+  const { data, error } = await supabase
+    .from('folder_share_links')
+    .select('id, folder_id, owner_id, token, created_at, revoked_at')
+    .eq('owner_id', ownerId)
+    .is('revoked_at', null)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getActiveFolderShareLink(
   ownerId: string,
   folderId: string,
