@@ -4,7 +4,7 @@ export const FREE_STORAGE_WARNING_RATIO = 0.8
 export const PAID_STORAGE_WARNING_RATIO = 0.9
 /** @deprecated Use FREE_PLAN_SMART_FILING_DAILY_LIMIT */
 export const FREE_AI_SCAN_LIMIT = 5
-export const FREE_PLAN_SMART_FILING_DAILY_LIMIT = 5
+export const FREE_PLAN_SMART_FILING_DAILY_LIMIT = 10
 
 export const STORAGE_ADDON_TIERS = [
   { gb: 10, monthly: 1.99, annual: 15.99 },

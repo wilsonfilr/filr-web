@@ -11,6 +11,9 @@ export const PREMIUM_PLAN_FEATURES = [
 export const PREMIUM_ANNUAL_PRICE = '$39.99'
 export const PREMIUM_MONTHLY_PRICE = '$4.99'
 
+/** Annual introductory offer length — must match App Store Connect. */
+export const ANNUAL_FREE_TRIAL_DAYS = 3
+
 export function premiumPlanDisplayName(plan: PremiumBillingPlan): string {
   return plan === 'annual' ? 'Annual' : 'Monthly'
 }
@@ -20,7 +23,7 @@ export function premiumPlanDetailsLabel(plan: PremiumBillingPlan): string {
 }
 
 export function premiumCtaLabel(plan: PremiumBillingPlan): string {
-  return plan === 'annual' ? 'Start 7-Day Free Trial' : 'Start now'
+  return plan === 'annual' ? `Start ${ANNUAL_FREE_TRIAL_DAYS}-Day Free Trial` : 'Start now'
 }
 
 export function premiumPlanPriceLabel(plan: PremiumBillingPlan): string {

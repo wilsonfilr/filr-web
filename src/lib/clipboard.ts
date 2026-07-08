@@ -36,3 +36,12 @@ export function topLevelSelectedFolderIds(folderIds: string[], folders: Folder[]
     return true
   })
 }
+
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}

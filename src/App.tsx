@@ -43,9 +43,14 @@ import {
   uploadTextDocument,
   uploadImageDocument,
 } from './data/filr'
+import {
+  getActiveFolderShareLink,
+  revokeFolderShareLink,
+} from './lib/folderShareLinks'
 import { deleteAccount } from './lib/authService'
 import AuthScreen from './components/AuthScreen'
 import MobileAppPrompt from './components/MobileAppPrompt'
+import PublicSharePage from './components/PublicSharePage'
 import { useDeviceKind } from './hooks/useDeviceKind'
 import Topbar from './components/Topbar'
 import Sidebar from './components/Sidebar'
@@ -63,6 +68,7 @@ import NewFolderDialog from './components/NewFolderDialog'
 import FileItDialog from './components/FileItDialog'
 import StorageAlertDialog from './components/StorageAlertDialog'
 import ContextMenu, { type MenuAction } from './components/ContextMenu'
+import ShareFolderDialog from './components/ShareFolderDialog'
 import Snackbar, { type ToastState } from './components/Snackbar'
 import SortMenu from './components/SortMenu'
 import TagFilterRow from './components/TagFilterRow'
@@ -88,7 +94,22 @@ import {
   TrashIcon,
 } from './components/icons'
 
+function parseShareTokenFromPath(): string | null {
+  const match = window.location.pathname.match(/^\/share\/([^/]+)\/?$/)
+  if (!match?.[1]) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
 export default function App() {
+  const shareToken = parseShareTokenFromPath()
+  if (shareToken) {
+    return <PublicSharePage token={shareToken} />
+  }
+
   const deviceKind = useDeviceKind()
   const { user, loading: authLoading } = useAuth()
 
@@ -157,6 +178,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   const [moveItems, setMoveItems] = useState<DragItem[] | null>(null)
   const [addTagItems, setAddTagItems] = useState<DragItem[] | null>(null)
   const [renameItem, setRenameItem] = useState<DragItem | null>(null)
+  const [shareFolderTarget, setShareFolderTarget] = useState<{ id: string; name: string } | null>(null)
   const [fileItItems, setFileItItems] = useState<FileItItem[] | null>(null)
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
   const [downloading, setDownloading] = useState(false)
@@ -928,6 +950,37 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
       ]
     }
     setContextMenu({ x: e.clientX, y: e.clientY, actions })
+    if (items.length === 1 && items[0]?.type === 'folder') {
+      const folderId = items[0].id
+      void getActiveFolderShareLink(userId, folderId).then((active) => {
+        if (!active) return
+        setContextMenu((current) => {
+          if (!current) return current
+          return {
+            ...current,
+            actions: [
+              {
+                label: 'Stop Sharing',
+                icon: <ExportIcon className="h-4 w-4" />,
+                destructive: true,
+                onClick: () => {
+                  setContextMenu(null)
+                  void (async () => {
+                    try {
+                      await revokeFolderShareLink(userId, folderId)
+                      setToast({ message: 'Folder sharing stopped.' })
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : 'Could not stop sharing.')
+                    }
+                  })()
+                },
+              },
+              ...current.actions,
+            ],
+          }
+        })
+      })
+    }
   }
 
   function openBackgroundMenu(e: React.MouseEvent) {
@@ -960,7 +1013,18 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
   function buildMenuActions(items: DragItem[]): MenuAction[] {
     const hasDoc = items.some((i) => i.type === 'document')
     const single = items.length === 1
-    const actions: MenuAction[] = [
+    const singleFolder = single && items[0]?.type === 'folder'
+    const actions: MenuAction[] = []
+    if (singleFolder) {
+      actions.push({
+        label: 'Share Folder',
+        icon: <ExportIcon className="h-4 w-4" />,
+        onClick: () => {
+          setShareFolderTarget({ id: items[0]!.id, name: itemName(items[0]!) })
+        },
+      })
+    }
+    actions.push(
       { label: 'Copy', icon: <CopyIcon className="h-4 w-4" />, onClick: () => performCopy(items) },
       { label: 'Cut', icon: <CutIcon className="h-4 w-4" />, onClick: () => performCut(items) },
       { label: 'Move to…', icon: <MoveIcon className="h-4 w-4" />, onClick: () => setMoveItems(items) },
@@ -971,7 +1035,7 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
         onClick: () => setRenameItem(items[0]),
       },
       { label: 'Add tag', icon: <TagIcon className="h-4 w-4" />, onClick: () => setAddTagItems(items) },
-    ]
+    )
     if (hasDoc) {
       actions.push({ label: 'File it', icon: <SparkleIcon className="h-4 w-4" />, onClick: () => openFileIt(items) })
       actions.push({
@@ -1531,6 +1595,15 @@ function Workspace({ userId, email }: { userId: string; email: string | null }) 
           kind={renameItem.type}
           onRename={(name) => void performRename(renameItem, name)}
           onClose={() => setRenameItem(null)}
+        />
+      )}
+
+      {shareFolderTarget && (
+        <ShareFolderDialog
+          folderId={shareFolderTarget.id}
+          folderName={shareFolderTarget.name}
+          userId={userId}
+          onClose={() => setShareFolderTarget(null)}
         />
       )}
 
